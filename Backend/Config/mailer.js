@@ -1,9 +1,13 @@
 import nodemailer from 'nodemailer';
+import dns from 'node:dns';
 
 function stripOuterQuotes(value) {
     const s = String(value ?? '').trim();
     return s.replace(/^["']|["']$/g, '');
 }
+
+// Some hosts (Render) have flaky/no IPv6 egress; prefer IPv4 for SMTP.
+dns.setDefaultResultOrder('ipv4first');
 
 /** Prefer EMAIL_USER / EMAIL_PASS; fall back to existing SMTP_* used by utils/mail.js */
 export function getEmailCredentials() {
@@ -45,11 +49,31 @@ export function createOtpTransporter() {
     if (!user || !pass) {
         throw new Error('EMAIL_USER and EMAIL_PASS (or SMTP_USER and SMTP_PASS) are not set');
     }
+
+    const host = stripOuterQuotes(process.env.SMTP_HOST || 'smtp.gmail.com') || 'smtp.gmail.com';
+    const portRaw = stripOuterQuotes(process.env.SMTP_PORT || '');
+    const secureRaw = stripOuterQuotes(process.env.SMTP_SECURE || '');
+
+    // Gmail on some cloud hosts works more reliably on 465 (implicit TLS).
+    const defaultPort = host === 'smtp.gmail.com' ? 465 : 587;
+    const port = Number(portRaw || defaultPort);
+    const secure =
+        secureRaw !== ''
+            ? ['true', '1', 'yes'].includes(String(secureRaw).toLowerCase())
+            : port === 465;
+
     return nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
+        host,
+        port,
+        secure,
         auth: { user, pass },
+        connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 15000),
+        greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 15000),
+        socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 20000),
+        tls: {
+            // Helps some providers/hosts that need explicit SNI.
+            servername: host,
+        },
     });
 }
 
