@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 import { FaArrowLeft, FaRegStar, FaStar } from 'react-icons/fa'
 import { FiSend } from 'react-icons/fi'
 
-const API = 'http://localhost:4000'
+const API = 'https://food-backend-s7t0.onrender.com'
 
 const CATEGORIES = [
   { value: 'general', label: 'General' },

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-const API = 'http://localhost:4000';
+const API = 'https://food-backend-s7t0.onrender.com';
 
 /** After checkout: short grace window before order shows in admin; user may cancel. */
 const OrderGraceOverlay = ({

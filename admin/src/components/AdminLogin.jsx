@@ -55,7 +55,7 @@ const AdminLogin = () => {
       const msg = err.response?.data?.message;
       if (!err.response) {
         showToast(
-          'Cannot reach API. Start Backend and set admin/.env VITE_API_URL (e.g. http://localhost:4000).',
+          'Cannot reach API. Check admin/.env VITE_API_URL (e.g. https://food-backend-s7t0.onrender.com).',
           true,
         );
       } else if (status === 401) {

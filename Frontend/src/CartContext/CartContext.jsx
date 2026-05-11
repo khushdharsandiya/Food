@@ -3,6 +3,8 @@ import axios from 'axios'
 
 const CartContext = createContext();
 
+const API = 'https://food-backend-s7t0.onrender.com';
+
 // reducer handling cart actions like Add Rwmove Update 
 
 const cartReducer = (state, action) => {
@@ -65,7 +67,7 @@ export const CartProvider = ({ children }) => {
         if (!token) return;
 
         axios
-            .get('http://localhost:4000/api/cart', {
+            .get(`${API}/api/cart`, {
                 withCredentials: true,
                 headers: { Authorization: `Bearer ${token}` },
             })
@@ -86,7 +88,7 @@ export const CartProvider = ({ children }) => {
             return;
         }
         const res = await axios.post(
-            'http://localhost:4000/api/cart',
+            `${API}/api/cart`,
             { itemId: item._id, quantity: qty },
             {
                 withCredentials: true,
@@ -99,7 +101,7 @@ export const CartProvider = ({ children }) => {
     const removeFromCart = useCallback(async (_id) => {
         const token = localStorage.getItem('authToken');
         if (!token) return;
-        await axios.delete(`http://localhost:4000/api/cart/${_id}`, {
+        await axios.delete(`${API}/api/cart/${_id}`, {
             withCredentials: true,
             headers: { Authorization: `Bearer ${token}` },
         });
@@ -110,7 +112,7 @@ export const CartProvider = ({ children }) => {
         const token = localStorage.getItem('authToken');
         if (!token) return;
         const res = await axios.put(
-            `http://localhost:4000/api/cart/${_id}`,
+            `${API}/api/cart/${_id}`,
             { quantity: qty },
             {
                 withCredentials: true,
@@ -127,7 +129,7 @@ export const CartProvider = ({ children }) => {
             return;
         }
         await axios.post(
-            `http://localhost:4000/api/cart/clear`,
+            `${API}/api/cart/clear`,
             {},
             {
                 withCredentials: true,
@@ -141,7 +143,7 @@ export const CartProvider = ({ children }) => {
         const token = localStorage.getItem('authToken');
         if (!token) return;
         try {
-            const { data } = await axios.get('http://localhost:4000/api/cart', {
+            const { data } = await axios.get(`${API}/api/cart`, {
                 withCredentials: true,
                 headers: { Authorization: `Bearer ${token}` },
             });

@@ -10,6 +10,7 @@ import { normalizeMenuCategoryKey } from '../../utils/menuCategory';
 import { itemsArrayFromApiResponse } from '../../utils/itemsResponse';
 
 const categories = ['breakfast', 'lunch', 'dinner', 'mexican', 'italian', 'desserts', 'drinks'];
+const API = 'https://food-backend-s7t0.onrender.com';
 
 const OurHomeMenu = () => {
     const [activeCategory, setActiveCategory] = useState(categories[0]);
@@ -17,7 +18,7 @@ const OurHomeMenu = () => {
     const [menuData, setMenuData] = useState({});
 
     useEffect(() => {
-        axios.get("http://localhost:4000/api/items")
+        axios.get(`${API}/api/items`)
             .then(res => {
                 const list = itemsArrayFromApiResponse(res.data);
                 const grouped = list.reduce((acc, item) => {

@@ -6,7 +6,7 @@ import toast, { Toaster } from 'react-hot-toast'
 import { resolveItemImageUrl, menuImageSrc } from '../../utils/imageUrl'
 import { useCart } from '../../CartContext/CartContext'
 
-const API = 'http://localhost:4000'
+const API = 'https://food-backend-s7t0.onrender.com'
 
 /** Order list polls for live status updates (e.g. Out for delivery → Delivered). */
 const ORDERS_POLL_MS = 2000
@@ -26,7 +26,7 @@ const MyOrder = () => {
     const fetchOrders = useCallback(async ({ silent } = {}) => {
         try {
             if (!silent) setLoading(true);
-            const response = await axios.get('http://localhost:4000/api/orders', {
+            const response = await axios.get(`${API}/api/orders`, {
                 params: { email: user?.email },
                 headers: {
                     Authorization: `Bearer ${localStorage.getItem('authToken')}`

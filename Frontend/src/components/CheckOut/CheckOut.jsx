@@ -6,7 +6,7 @@ import axios from 'axios'
 import toast, { Toaster } from 'react-hot-toast'
 import OrderGraceOverlay from '../OrderGraceOverlay/OrderGraceOverlay'
 
-const API = 'http://localhost:4000'
+const API = 'https://food-backend-s7t0.onrender.com'
 
 /** Razorpay official checkout script (demo / production same URL) */
 function loadRazorpayScript() {

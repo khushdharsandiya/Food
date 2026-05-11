@@ -1,4 +1,4 @@
-const API_ORIGIN = 'http://localhost:4000';
+const API_ORIGIN = 'https://food-backend-s7t0.onrender.com';
 
 /** SVG placeholder when image missing or fails */
 export const MENU_IMAGE_PLACEHOLDER =

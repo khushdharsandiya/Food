@@ -1,7 +1,7 @@
 import express from 'express';
 import {
     adminLogin,
-    adminForgotPasswordOtp,
+    adminForgotPasswordOtp ,
     adminVerifyOtp,
     adminResetPasswordOtp,
 } from '../Controllers/adminController.js';

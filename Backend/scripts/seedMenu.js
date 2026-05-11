@@ -1737,7 +1737,7 @@ const menuItems = [
         category: 'italian',
         price: 349,
         rating: 4.5,
-        hearts: 88,
+        hearts: 90,
         total: 349,
         imageUrl: 'https://www.glitterandgraze.com/wp-content/uploads/2017/02/Untitled-design-50_auto_x2-500x500.jpg',
     },

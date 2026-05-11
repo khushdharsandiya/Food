@@ -4,7 +4,7 @@ import { iconClass, inputBase } from '../../assets/dummydata';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 
-const url = 'http://localhost:4000'
+const url = 'https://food-backend-s7t0.onrender.com'
 
 const Login = ({ onLoginSuccess, onclose }) => {
 

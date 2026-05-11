@@ -3,7 +3,7 @@ import { FaArrowLeft, FaCheckCircle, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios'
 
-const url = 'http://localhost:4000'
+const url = 'https://food-backend-s7t0.onrender.com'
 
 
 const AwesomeTost = ({ message, icon, isError }) => (

@@ -3,7 +3,7 @@ import axios from 'axios'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { FaArrowLeft, FaCheckCircle, FaEye, FaEyeSlash, FaLock, FaUtensils } from 'react-icons/fa'
 
-const API = 'http://localhost:4000'
+const API = 'https://food-backend-s7t0.onrender.com'
 
 const ResetPassword = () => {
   const { token: tokenParam } = useParams()

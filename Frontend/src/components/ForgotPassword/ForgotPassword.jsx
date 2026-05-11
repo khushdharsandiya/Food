@@ -12,7 +12,7 @@ import {
   FaShieldAlt,
 } from 'react-icons/fa'
 
-const API = 'http://localhost:4000'
+const API = 'https://food-backend-s7t0.onrender.com'
 
 const ForgotPassword = () => {
   const navigate = useNavigate()

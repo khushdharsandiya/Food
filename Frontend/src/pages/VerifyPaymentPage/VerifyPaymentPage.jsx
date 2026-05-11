@@ -3,6 +3,8 @@ import { useCart } from '../../CartContext/CartContext'
 import { useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios';
 
+const API = 'https://food-backend-s7t0.onrender.com';
+
 const VerifyPaymentPage = () => {
 
   const { clearCart } = useCart();
@@ -31,7 +33,7 @@ const VerifyPaymentPage = () => {
     }
     
     // STRIPE SUCCESS=TRUE
-    axios.get('http://localhost:4000/api/orders/confirm', {
+    axios.get(`${API}/api/orders/confirm`, {
       params: { session_id },
       headers: authHeaders
     })

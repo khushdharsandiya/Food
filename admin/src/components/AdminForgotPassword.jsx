@@ -52,7 +52,7 @@ const AdminForgotPassword = () => {
     } catch (err) {
       if (!err.response) {
         setError(
-          'Cannot reach API. Start the Backend and set VITE_API_URL in admin (e.g. http://localhost:4000).',
+          'Cannot reach API. Check VITE_API_URL in admin (e.g. https://food-backend-s7t0.onrender.com).',
         );
       } else {
         setError(err.response?.data?.message || 'Request failed.');

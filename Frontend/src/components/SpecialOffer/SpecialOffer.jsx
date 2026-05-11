@@ -21,7 +21,7 @@ const SpecialOffer = () => {
     setLoading(true);
     setFetchError('');
     axios
-      .get('http://localhost:4000/api/items')
+      .get('https://food-backend-s7t0.onrender.com/api/items')
       .then((res) => {
         if (cancelled) return;
         setItems(itemsArrayFromApiResponse(res.data));
@@ -31,7 +31,7 @@ const SpecialOffer = () => {
         if (!cancelled) {
           setItems([]);
           setFetchError(
-            'Could not load the menu. Make sure the backend is running at http://localhost:4000 and the database has menu items.',
+            'Could not load the menu. Make sure the backend is reachable and the database has menu items.',
           );
         }
       })

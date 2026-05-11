@@ -14,6 +14,7 @@ const FAVORITES_KEY = 'menuFavorites';
 /** How many items to show first; “View more” loads the next batch */
 const INITIAL_MENU_VISIBLE = 12;
 const MENU_PAGE_STEP = 12;
+const API = 'https://food-backend-s7t0.onrender.com';
 
 const OurMenu = () => {
     const [activeCategory, setActiveCategory] = useState(categories[0]);
@@ -39,7 +40,7 @@ const OurMenu = () => {
             setIsLoading(true);
             setLoadError('');
             try {
-                const res = await axios.get('http://localhost:4000/api/items');
+                const res = await axios.get(`${API}/api/items`);
                 const list = itemsArrayFromApiResponse(res.data);
                 const byCategory = list.reduce((acc, item) => {
                     const cat = normalizeMenuCategoryKey(item.category);

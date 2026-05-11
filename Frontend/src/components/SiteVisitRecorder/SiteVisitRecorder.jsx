@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import axios from 'axios';
 
-const API = 'http://localhost:4000';
+const API = 'https://food-backend-s7t0.onrender.com';
 const SESSION_KEY = 'ff_site_visit_v1';
 
 /**
