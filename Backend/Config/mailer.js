@@ -168,11 +168,20 @@ export async function sendOtpEmail(toEmail, otp, username = '') {
         if (!Array.isArray(v4) || v4.length === 0) {
             throw err;
         }
-        const retryTransporter = nodemailer.createTransport({
-            ...base,
-            host: v4[0],
-            tls: { ...base.tls, servername: 'smtp.gmail.com' },
-        });
-        await retryTransporter.sendMail(payload);
+        let lastErr = err;
+        for (const ip of v4) {
+            try {
+                const retryTransporter = nodemailer.createTransport({
+                    ...base,
+                    host: ip,
+                    tls: { ...base.tls, servername: 'smtp.gmail.com' },
+                });
+                await retryTransporter.sendMail(payload);
+                return;
+            } catch (e) {
+                lastErr = e;
+            }
+        }
+        throw lastErr;
     }
 }
