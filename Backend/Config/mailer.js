@@ -19,6 +19,8 @@ export function getEmailCredentials() {
 }
 
 export function isOtpMailReady() {
+    const resendKey = stripOuterQuotes(process.env.RESEND_API_KEY || '');
+    if (resendKey) return true;
     const { user, pass } = getEmailCredentials();
     return Boolean(user && pass);
 }
@@ -170,10 +172,11 @@ function escapeHtml(s) {
  * @param {string} [username]
  */
 export async function sendOtpEmail(toEmail, otp, username = '') {
-    const transporter = createOtpTransporter();
+    const resendKey = stripOuterQuotes(process.env.RESEND_API_KEY || '');
     const { user } = getEmailCredentials();
     const from =
-        String(process.env.MAIL_FROM || '').trim() || `Foodie Frenzy <${user}>`;
+        String(process.env.MAIL_FROM || process.env.RESEND_FROM || '').trim() ||
+        (user ? `Foodie Frenzy <${user}>` : 'Foodie Frenzy <onboarding@resend.dev>');
     const safeName = String(username || '').replace(/[<>]/g, '');
     const safeOtp = escapeHtml(otp);
 
@@ -198,6 +201,32 @@ export async function sendOtpEmail(toEmail, otp, username = '') {
 </div>`,
     };
 
+    // Preferred in production if provided: HTTPS API (avoids SMTP network timeout issues).
+    if (resendKey) {
+        const res = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${resendKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                from: payload.from,
+                to: [toEmail],
+                subject: payload.subject,
+                text: payload.text,
+                html: payload.html,
+            }),
+        });
+        if (!res.ok) {
+            const body = await res.text().catch(() => '');
+            const err = new Error(body || `Resend API failed with status ${res.status}`);
+            err.code = 'RESEND_API_ERROR';
+            throw err;
+        }
+        return;
+    }
+
+    const transporter = createOtpTransporter();
     try {
         await transporter.sendMail(payload);
         return;

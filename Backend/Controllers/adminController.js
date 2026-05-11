@@ -153,7 +153,7 @@ export const adminForgotPasswordOtp = async (req, res) => {
                 code === 'EAUTH' || /535|Username and Password not accepted/i.test(resp)
                     ? 'Gmail rejected login. Use an App Password (16 chars) with 2‑Step Verification ON. Do NOT use your normal Gmail password.'
                     : /ETIMEDOUT|ENETUNREACH|ECONN|ESOCKET/i.test(code + ' ' + resp)
-                      ? 'SMTP network timeout. Try SMTP_PORT=465 and SMTP_SECURE=true (or redeploy with the latest SMTP fixes).'
+                      ? 'SMTP network timeout. Set SMTP_PORT=465 and SMTP_SECURE=true, or switch to a transactional SMTP provider (Brevo/SendGrid/Mailgun).'
                       : 'Check EMAIL_USER/EMAIL_PASS or SMTP_* environment variables.';
             return res.status(500).json({
                 success: false,
