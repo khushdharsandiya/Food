@@ -1,9 +1,14 @@
 import nodemailer from 'nodemailer';
 
+function stripOuterQuotes(value) {
+    const s = String(value ?? '').trim();
+    return s.replace(/^["']|["']$/g, '');
+}
+
 /** Prefer EMAIL_USER / EMAIL_PASS; fall back to existing SMTP_* used by utils/mail.js */
 export function getEmailCredentials() {
-    const user = String(process.env.EMAIL_USER ?? process.env.SMTP_USER ?? '').trim();
-    let pass = String(process.env.EMAIL_PASS ?? process.env.SMTP_PASS ?? '').trim();
+    const user = stripOuterQuotes(process.env.EMAIL_USER ?? process.env.SMTP_USER ?? '');
+    let pass = stripOuterQuotes(process.env.EMAIL_PASS ?? process.env.SMTP_PASS ?? '');
     // Gmail app passwords are 16 chars; spaces in .env are optional — SMTP wants no spaces
     pass = pass.replace(/\s+/g, '');
     return { user, pass };
