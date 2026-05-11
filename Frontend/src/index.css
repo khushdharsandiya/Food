@@ -1,0 +1,273 @@
+@import "tailwindcss";
+
+html {
+    /* Instant scroll-to-top on route change; smooth scrolling avoids jarring jumps */
+    scroll-behavior: auto;
+}
+
+body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+    background: rgba(180, 83, 9, 0.42);
+    color: #fffbeb;
+}
+
+/* Dish / item titles — clear sans-serif, easy to read */
+.font-dish-name {
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+}
+
+.orbit {
+    animation: orbit 20s linear infinite;
+}
+
+.orbit-delay-5 {
+    animation: orbit 20s linear infinite -5s;
+}
+
+.orbit-delay-10 {
+    animation: orbit 20s linear infinite -10s;
+}
+
+.orbit-delay-15 {
+    animation: orbit 20s linear infinite -15s;
+}
+
+@keyframes orbit {
+    0% {
+        transform: rotate(0deg) translateX(150px) rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg) translateX(150px) rotate(-360deg);
+    }
+}
+
+/* Initial page load / refresh splash */
+.ff-initial-splash__bg {
+    background:
+        radial-gradient(ellipse 100% 70% at 50% -10%, rgba(217, 119, 6, 0.28) 0%, transparent 50%),
+        radial-gradient(ellipse 80% 50% at 80% 100%, rgba(180, 83, 9, 0.18) 0%, transparent 45%),
+        linear-gradient(165deg, #1a120d 0%, #100c09 38%, #0a0806 100%);
+}
+
+.ff-initial-splash__grain {
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.ff-splash-orbit {
+    border: 2px solid transparent;
+    border-top-color: rgba(251, 191, 36, 0.75);
+    border-right-color: rgba(217, 119, 6, 0.2);
+    animation: ff-splash-orbit-spin 2.8s linear infinite;
+}
+
+.ff-splash-orbit--inner {
+    border-top-color: rgba(253, 230, 138, 0.5);
+    border-right-color: rgba(180, 83, 9, 0.15);
+    animation-duration: 3.8s;
+    animation-direction: reverse;
+}
+
+@keyframes ff-splash-orbit-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.ff-splash-sparkles {
+    animation: ff-splash-sparkle-rotate 12s linear infinite;
+}
+
+@keyframes ff-splash-sparkle-rotate {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.ff-splash-spark {
+    position: absolute;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(254, 243, 199, 0.95) 0%, rgba(251, 191, 36, 0.4) 50%, transparent 70%);
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.6);
+    animation: ff-splash-spark-pulse 2s ease-in-out infinite;
+}
+
+.ff-splash-spark--a {
+    top: 8%;
+    right: 22%;
+    animation-delay: 0s;
+}
+
+.ff-splash-spark--b {
+    bottom: 18%;
+    left: 12%;
+    animation-delay: 0.4s;
+    width: 4px;
+    height: 4px;
+}
+
+.ff-splash-spark--c {
+    top: 38%;
+    left: 6%;
+    animation-delay: 0.8s;
+    width: 3px;
+    height: 3px;
+}
+
+@keyframes ff-splash-spark-pulse {
+    0%,
+    100% {
+        opacity: 0.35;
+        transform: scale(0.85);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+}
+
+.ff-initial-splash__ring {
+    animation: ff-splash-ring 2.2s ease-in-out infinite;
+}
+
+.ff-initial-splash__toque {
+    animation: ff-splash-toque 2s ease-in-out infinite;
+}
+
+@keyframes ff-splash-ring {
+    0%,
+    100% {
+        box-shadow:
+            0 0 60px -6px rgba(245, 158, 11, 0.5),
+            inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow:
+            0 0 72px -2px rgba(251, 191, 36, 0.55),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        transform: scale(1.03);
+    }
+}
+
+@keyframes ff-splash-toque {
+    0%,
+    100% {
+        transform: translateY(0) rotate(-2deg);
+    }
+    50% {
+        transform: translateY(-5px) rotate(2deg);
+    }
+}
+
+.ff-splash-title {
+    background: linear-gradient(
+        110deg,
+        #fffbeb 0%,
+        #fde68a 22%,
+        #fbbf24 45%,
+        #f59e0b 62%,
+        #fde68a 78%,
+        #fef3c7 100%
+    );
+    background-size: 220% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: ff-splash-title-shine 3.4s ease-in-out infinite;
+    filter: drop-shadow(0 2px 24px rgba(245, 158, 11, 0.25));
+}
+
+.ff-splash-title-accent {
+    background: linear-gradient(
+        110deg,
+        #fcd34d 0%,
+        #f59e0b 35%,
+        #ea580c 55%,
+        #fbbf24 85%,
+        #fde68a 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: ff-splash-title-shine 3.4s ease-in-out infinite 0.25s;
+}
+
+@keyframes ff-splash-title-shine {
+    0%,
+    100% {
+        background-position: 0% center;
+    }
+    50% {
+        background-position: 100% center;
+    }
+}
+
+.ff-splash-progress-bar {
+    width: 38%;
+    animation: ff-splash-progress 1.35s ease-in-out infinite;
+}
+
+@keyframes ff-splash-progress {
+    0% {
+        transform: translateX(-108%);
+        opacity: 0.88;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateX(280%);
+        opacity: 0.88;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ff-splash-orbit,
+    .ff-splash-orbit--inner,
+    .ff-splash-sparkles,
+    .ff-splash-spark,
+    .ff-initial-splash__ring,
+    .ff-initial-splash__toque,
+    .ff-splash-title,
+    .ff-splash-title-accent,
+    .ff-splash-progress-bar {
+        animation: none;
+    }
+
+    .ff-splash-title,
+    .ff-splash-title-accent {
+        background: none;
+        color: #fef3c7;
+        -webkit-background-clip: unset;
+        background-clip: unset;
+        filter: none;
+    }
+
+    .ff-splash-title-accent {
+        color: #fbbf24;
+    }
+
+    .ff-initial-splash__ring {
+        box-shadow:
+            0 0 60px -6px rgba(245, 158, 11, 0.5),
+            inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+
+    .ff-splash-progress-bar {
+        width: 100%;
+        transform: none;
+        opacity: 0.92;
+    }
+
+    .ff-splash-spark {
+        opacity: 0.5;
+    }
+}

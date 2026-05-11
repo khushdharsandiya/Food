@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/* Dark / amber scrollbars — slim, rounded, low-contrast track */
+.ff-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(217, 119, 6, 0.55) rgba(24, 20, 17, 0.35);
+  scrollbar-gutter: stable;
+}
+
+.ff-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.ff-scrollbar::-webkit-scrollbar-track {
+  background: rgba(28, 25, 22, 0.35);
+  border-radius: 100px;
+  margin: 4px;
+}
+
+.ff-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(251, 191, 36, 0.35),
+    rgba(180, 83, 9, 0.55)
+  );
+  border-radius: 100px;
+  border: 1px solid rgba(12, 10, 8, 0.4);
+}
+
+.ff-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(251, 191, 36, 0.55);
+}
+
+.ff-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Inner panels (e.g. order items) — even lighter presence */
+.ff-scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(180, 83, 9, 0.35) transparent;
+}
+
+.ff-scrollbar-subtle::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.ff-scrollbar-subtle::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 100px;
+}
+
+.ff-scrollbar-subtle::-webkit-scrollbar-thumb {
+  background: rgba(217, 119, 6, 0.35);
+  border-radius: 100px;
+}
+
+.ff-scrollbar-subtle::-webkit-scrollbar-thumb:hover {
+  background: rgba(251, 191, 36, 0.45);
+}
