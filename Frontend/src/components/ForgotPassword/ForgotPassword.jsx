@@ -35,8 +35,6 @@ const ForgotPassword = () => {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  /** Backend sends this when MAIL_LOG_OTP_TO_CONSOLE=true (local dev). */
-  const [devOtp, setDevOtp] = useState(null)
 
   const isStrongPassword = (value) =>
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(value)
@@ -50,7 +48,6 @@ const ForgotPassword = () => {
       const { data } = await axios.post(`${API}/api/auth/forgot-password`, { email: email.trim() })
       if (data.success) {
         setMessage(data.message || 'OTP sent.')
-        setDevOtp(data.server?.devOtp ?? null)
         setStep('otp')
       } else {
         setError(data.message || 'Something went wrong.')
@@ -128,7 +125,6 @@ const ForgotPassword = () => {
     setConfirmPassword('')
     setError('')
     setMessage('')
-    setDevOtp(null)
   }
 
   return (
@@ -206,15 +202,6 @@ const ForgotPassword = () => {
                   {loading ? 'Sending…' : 'Send OTP'}
                 </button>
               </form>
-            )}
-
-            {step === 'otp' && devOtp && (
-              <div className="mb-4 rounded-2xl border border-amber-600/40 bg-amber-950/35 px-4 py-3">
-                <p className="mb-1 font-cinzel text-xs text-amber-100/90">
-                  Local dev: OTP from server (also in backend terminal)
-                </p>
-                <p className="font-mono text-2xl font-bold tracking-widest text-amber-300">{devOtp}</p>
-              </div>
             )}
 
             {step === 'otp' && (

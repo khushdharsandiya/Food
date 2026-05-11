@@ -136,7 +136,6 @@ export const adminForgotPasswordOtp = async (req, res) => {
                 success: true,
                 message:
                     'Development mode: OTP is printed in the backend terminal. It expires in 5 minutes.',
-                server: { devOtp: otp, delivery: 'console' },
             });
         }
 

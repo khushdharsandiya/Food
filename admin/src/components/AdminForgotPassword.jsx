@@ -37,7 +37,6 @@ const AdminForgotPassword = () => {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [devOtp, setDevOtp] = useState(null);
 
   const isStrongPassword = (value) =>
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(value);
@@ -51,7 +50,6 @@ const AdminForgotPassword = () => {
       const { data } = await adminClient.post('/api/admin/forgot-password', { email: email.trim() });
       if (data.success) {
         setMessage(data.message || 'OTP sent.');
-        setDevOtp(data.server?.devOtp ?? null);
         setStep('otp');
       } else {
         setError(data.message || 'Something went wrong.');
@@ -143,7 +141,6 @@ const AdminForgotPassword = () => {
     setConfirmPassword('');
     setError('');
     setMessage('');
-    setDevOtp(null);
   };
 
   return (
@@ -222,13 +219,6 @@ const AdminForgotPassword = () => {
                 {loading ? 'Sending…' : 'Send OTP'}
               </button>
             </form>
-          )}
-
-          {step === 'otp' && devOtp && (
-            <div className="mb-4 rounded-lg border border-amber-600/40 bg-amber-950/35 px-4 py-3">
-              <p className="mb-1 text-xs text-amber-100/90">Local dev: OTP (also in backend terminal)</p>
-              <p className="font-mono text-2xl font-bold tracking-widest text-amber-300">{devOtp}</p>
-            </div>
           )}
 
           {step === 'otp' && (

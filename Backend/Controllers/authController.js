@@ -59,8 +59,7 @@ export const forgotPasswordOtp = async (req, res) => {
             return res.json({
                 success: true,
                 message:
-                    'Development mode: OTP is printed in the backend terminal (and below). It expires in 5 minutes.',
-                server: { devOtp: otp, delivery: 'console' },
+                    'Development mode: OTP is printed in the backend terminal. It expires in 5 minutes.',
             });
         }
 
