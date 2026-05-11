@@ -12,7 +12,11 @@ import {
   FaShieldAlt,
 } from 'react-icons/fa'
 
-const API = 'https://food-backend-s7t0.onrender.com'
+const API =
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? 'http://localhost:4000'
+    : 'https://food-backend-s7t0.onrender.com')
 
 const errorTextFromAxios = (err, fallback) => {
   const data = err?.response?.data

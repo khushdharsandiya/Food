@@ -1,7 +1,11 @@
 import axios from 'axios';
 import { clearAdminToken, getAdminToken } from '../utils/adminSession';
 
-const baseURL = import.meta.env.VITE_API_URL || 'https://food-backend-s7t0.onrender.com';
+const baseURL =
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? 'http://localhost:4000'
+    : 'https://food-backend-s7t0.onrender.com');
 
 export const adminClient = axios.create({ baseURL });
 
