@@ -285,7 +285,7 @@ const menuItems = [
         rating: 4.1,
         hearts: 66,
         total: 169,
-        imageUrl: 'https://i0.wp.com/ahappytreat.com/wp-content/uploads/2018/01/DSC_0653.jpg?fit=6000%2C4000&ssl=1',
+        imageUrl: 'https://www.indianhealthyrecipes.com/wp-content/uploads/2019/10/veg-roll-frankie.jpg',
     },
   
     {
