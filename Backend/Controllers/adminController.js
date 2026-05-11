@@ -148,10 +148,20 @@ export const adminForgotPasswordOtp = async (req, res) => {
             user.otpExpiry = undefined;
             user.otpVerified = false;
             await user.save();
+            const code = String(mailErr?.code || '').toUpperCase();
+            const resp = String(mailErr?.response || mailErr?.message || '');
+            const hint =
+                code === 'EAUTH' || /535|Username and Password not accepted/i.test(resp)
+                    ? 'Gmail rejected login. Use an App Password (16 chars) with 2‑Step Verification ON. Do NOT use your normal Gmail password.'
+                    : /ETIMEDOUT|ENETUNREACH|ECONN|ESOCKET/i.test(code + ' ' + resp)
+                      ? 'SMTP network timeout. Try SMTP_PORT=465 and SMTP_SECURE=true (or redeploy with the latest SMTP fixes).'
+                      : 'Check EMAIL_USER/EMAIL_PASS or SMTP_* environment variables.';
             return res.status(500).json({
                 success: false,
-                message:
-                    'Could not send email. Check Gmail App Password and 2-Step Verification on the account.',
+                message: 'Could not send email.',
+                error: code || undefined,
+                detail: resp ? resp.slice(0, 180) : undefined,
+                hint,
             });
         }
 
