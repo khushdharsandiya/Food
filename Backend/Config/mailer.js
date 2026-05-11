@@ -113,6 +113,49 @@ function looksLikeIpv6EgressIssue(err) {
     );
 }
 
+async function trySendWithFallbackRoutes(base, payload) {
+    const routes = [];
+    const pushRoute = (host, port, secure, servername = 'smtp.gmail.com') => {
+        routes.push({ host, port, secure, servername });
+    };
+
+    // Try the originally configured route first.
+    pushRoute(base.host, base.port, base.secure, base.tls?.servername || base.host);
+
+    // For Gmail, also try both standard ports and resolved IPv4 targets.
+    if (base.host === 'smtp.gmail.com') {
+        pushRoute('smtp.gmail.com', 465, true, 'smtp.gmail.com');
+        pushRoute('smtp.gmail.com', 587, false, 'smtp.gmail.com');
+        const v4 = await dns.promises.resolve4('smtp.gmail.com').catch(() => []);
+        for (const ip of v4) {
+            pushRoute(ip, 465, true, 'smtp.gmail.com');
+            pushRoute(ip, 587, false, 'smtp.gmail.com');
+        }
+    }
+
+    const seen = new Set();
+    let lastErr = null;
+    for (const route of routes) {
+        const key = `${route.host}:${route.port}:${route.secure}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        try {
+            const transporter = nodemailer.createTransport({
+                ...base,
+                host: route.host,
+                port: route.port,
+                secure: route.secure,
+                tls: { ...base.tls, servername: route.servername },
+            });
+            await transporter.sendMail(payload);
+            return;
+        } catch (err) {
+            lastErr = err;
+        }
+    }
+    throw lastErr || new Error('SMTP delivery failed on all fallback routes');
+}
+
 function escapeHtml(s) {
     return String(s)
         .replace(/&/g, '&amp;')
@@ -159,29 +202,16 @@ export async function sendOtpEmail(toEmail, otp, username = '') {
         await transporter.sendMail(payload);
         return;
     } catch (err) {
-        // Render often cannot reach IPv6 SMTP targets; retry once via resolved IPv4.
         const base = smtpBaseOptions();
-        if (!looksLikeIpv6EgressIssue(err) || base.host !== 'smtp.gmail.com') {
+        if (
+            base.host !== 'smtp.gmail.com' &&
+            !/ETIMEDOUT|ENETUNREACH|ECONN|ESOCKET/i.test(
+                `${String(err?.code || '')} ${String(err?.message || '')}`,
+            )
+        ) {
             throw err;
         }
-        const v4 = await dns.promises.resolve4('smtp.gmail.com');
-        if (!Array.isArray(v4) || v4.length === 0) {
-            throw err;
-        }
-        let lastErr = err;
-        for (const ip of v4) {
-            try {
-                const retryTransporter = nodemailer.createTransport({
-                    ...base,
-                    host: ip,
-                    tls: { ...base.tls, servername: 'smtp.gmail.com' },
-                });
-                await retryTransporter.sendMail(payload);
-                return;
-            } catch (e) {
-                lastErr = e;
-            }
-        }
-        throw lastErr;
+        // Retry across multiple SMTP routes (hostname + IPv4 + 465/587).
+        await trySendWithFallbackRoutes(base, payload);
     }
 }
