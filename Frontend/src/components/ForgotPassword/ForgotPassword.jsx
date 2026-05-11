@@ -14,6 +14,13 @@ import {
 
 const API = 'https://food-backend-s7t0.onrender.com'
 
+const errorTextFromAxios = (err, fallback) => {
+  const data = err?.response?.data
+  if (!data) return err?.message || fallback
+  const parts = [data.message, data.hint, data.error, data.detail].filter(Boolean)
+  return parts.length > 0 ? parts.join(' ') : fallback
+}
+
 const ForgotPassword = () => {
   const navigate = useNavigate()
   const [step, setStep] = useState('email') // 'email' | 'otp' | 'password'
@@ -40,7 +47,7 @@ const ForgotPassword = () => {
     setMessage('')
 
     try {
-      const { data } = await axios.post(`${API}/api/auth/forgot-password`, { email })
+      const { data } = await axios.post(`${API}/api/auth/forgot-password`, { email: email.trim() })
       if (data.success) {
         setMessage(data.message || 'OTP sent.')
         setDevOtp(data.server?.devOtp ?? null)
@@ -49,7 +56,7 @@ const ForgotPassword = () => {
         setError(data.message || 'Something went wrong.')
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not reach the server.')
+      setError(errorTextFromAxios(err, 'Could not reach the server.'))
     } finally {
       setLoading(false)
     }
@@ -67,7 +74,7 @@ const ForgotPassword = () => {
     setMessage('')
 
     try {
-      const { data } = await axios.post(`${API}/api/auth/verify-otp`, { email, otp })
+      const { data } = await axios.post(`${API}/api/auth/verify-otp`, { email: email.trim(), otp })
       if (data.success) {
         setMessage(data.message || 'Verified.')
         setStep('password')
@@ -75,7 +82,7 @@ const ForgotPassword = () => {
         setError(data.message || 'Verification failed.')
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not verify OTP.')
+      setError(errorTextFromAxios(err, 'Could not verify OTP.'))
     } finally {
       setLoading(false)
     }
@@ -98,7 +105,7 @@ const ForgotPassword = () => {
     setLoading(true)
     try {
       const { data } = await axios.post(`${API}/api/auth/reset-password`, {
-        email,
+        email: email.trim(),
         newPassword,
       })
       if (data.success) {
@@ -108,7 +115,7 @@ const ForgotPassword = () => {
         setError(data.message || 'Failed to reset password.')
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to reset password.')
+      setError(errorTextFromAxios(err, 'Failed to reset password.'))
     } finally {
       setLoading(false)
     }

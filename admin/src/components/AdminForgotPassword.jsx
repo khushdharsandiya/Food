@@ -16,6 +16,13 @@ import adminClient from '../api/adminClient';
 const inputBase =
   'w-full rounded-lg bg-[#2D1B0E] text-amber-100 placeholder-amber-400/70 focus:outline-none focus:ring-2 focus:ring-amber-600 border border-amber-900/40';
 
+const errorTextFromAxios = (err, fallback) => {
+  const data = err?.response?.data;
+  if (!data) return err?.message || fallback;
+  const parts = [data.message, data.hint, data.error, data.detail].filter(Boolean);
+  return parts.length > 0 ? parts.join(' ') : fallback;
+};
+
 const AdminForgotPassword = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState('email');
@@ -41,7 +48,7 @@ const AdminForgotPassword = () => {
     setMessage('');
 
     try {
-      const { data } = await adminClient.post('/api/admin/forgot-password', { email });
+      const { data } = await adminClient.post('/api/admin/forgot-password', { email: email.trim() });
       if (data.success) {
         setMessage(data.message || 'OTP sent.');
         setDevOtp(data.server?.devOtp ?? null);
@@ -55,7 +62,7 @@ const AdminForgotPassword = () => {
           'Cannot reach API. Check VITE_API_URL in admin (e.g. https://food-backend-s7t0.onrender.com).',
         );
       } else {
-        setError(err.response?.data?.message || 'Request failed.');
+        setError(errorTextFromAxios(err, 'Request failed.'));
       }
     } finally {
       setLoading(false);
@@ -74,7 +81,7 @@ const AdminForgotPassword = () => {
     setMessage('');
 
     try {
-      const { data } = await adminClient.post('/api/admin/verify-otp', { email, otp });
+      const { data } = await adminClient.post('/api/admin/verify-otp', { email: email.trim(), otp });
       if (data.success) {
         setMessage(data.message || 'Verified.');
         setStep('password');
@@ -85,7 +92,7 @@ const AdminForgotPassword = () => {
       if (!err.response) {
         setError('Cannot reach API. Check Backend and VITE_API_URL.');
       } else {
-        setError(err.response?.data?.message || 'Could not verify OTP.');
+        setError(errorTextFromAxios(err, 'Could not verify OTP.'));
       }
     } finally {
       setLoading(false);
@@ -109,7 +116,7 @@ const AdminForgotPassword = () => {
     setLoading(true);
     try {
       const { data } = await adminClient.post('/api/admin/reset-password', {
-        email,
+        email: email.trim(),
         newPassword,
       });
       if (data.success) {
@@ -122,7 +129,7 @@ const AdminForgotPassword = () => {
       if (!err.response) {
         setError('Cannot reach API. Check Backend and VITE_API_URL.');
       } else {
-        setError(err.response?.data?.message || 'Failed to reset password.');
+        setError(errorTextFromAxios(err, 'Failed to reset password.'));
       }
     } finally {
       setLoading(false);
