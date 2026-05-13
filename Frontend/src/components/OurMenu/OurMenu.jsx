@@ -1,6 +1,6 @@
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react'
-import { useCart } from '../../CartContext/CartContext';
+import { useCart, isCartLinePendingSync } from '../../CartContext/CartContext';
 import { FaHeart, FaMinus, FaPlus, FaSearch } from 'react-icons/fa';
 import { FaStar, FaTimes } from 'react-icons/fa';
 import { useNavigate } from 'react-router-dom';
@@ -9,6 +9,7 @@ import { menuImageFallback, menuImageSrc } from '../../utils/imageUrl';
 import { normalizeMenuCategoryKey } from '../../utils/menuCategory';
 import { itemsArrayFromApiResponse } from '../../utils/itemsResponse';
 import './OurMenu.css';
+import { useLockBodyScroll } from '../../hooks/useLockBodyScroll'
 
 const categories = ['Breakfast', 'Lunch', 'Dinner', 'Mexican', 'Italian', 'Desserts', 'Drinks'];
 const FAVORITES_KEY = 'menuFavorites';
@@ -37,6 +38,7 @@ const OurMenu = () => {
     const [quickViewItem, setQuickViewItem] = useState(null);
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
 
+    useLockBodyScroll(showLoginPrompt || !!quickViewItem)
 
     useEffect(() => {
         const fetchMenu = async () => {
@@ -91,6 +93,7 @@ const OurMenu = () => {
     const sourceItems = lowerQuery ? allItems : categoryItems;
     const quickCartEntry = quickViewItem ? getCartEntry(quickViewItem._id) : null;
     const quickQty = quickCartEntry?.quantity || 0;
+    const quickQtyPending = quickCartEntry ? isCartLinePendingSync(quickCartEntry._id) : false;
 
     useEffect(() => {
         // Reset visible count when category, search, or favorites filter changes
@@ -247,6 +250,7 @@ const OurMenu = () => {
 
                         const cartEntry = getCartEntry(item._id)
                         const quantity = cartEntry?.quantity || 0;
+                        const qtyPending = cartEntry ? isCartLinePendingSync(cartEntry._id) : false;
                         const isOutOfStock = item.inStock === false;
 
                         return (
@@ -316,11 +320,13 @@ const OurMenu = () => {
                                         </div>
 
                                         {/* Cart Controls */}
-                                        <div className='flex items-center gap-2'>
+                                        <div className={`flex items-center gap-2 ${qtyPending ? 'pointer-events-none opacity-60' : ''}`}>
                                             {quantity > 0 ? (
                                                 <>
                                                     {/* Minus Button */}
                                                     <button
+                                                        type="button"
+                                                        disabled={qtyPending}
                                                         className='w-8 h-8 rounded-full bg-amber-900/40 flex items-center justify-center hover:bg-amber-800/50 transition-colors'
                                                         onClick={() =>
                                                             quantity > 1
@@ -338,6 +344,8 @@ const OurMenu = () => {
 
                                                     {/* Plus Button */}
                                                     <button
+                                                        type="button"
+                                                        disabled={qtyPending}
                                                         className='w-8 h-8 rounded-full bg-amber-900/40 flex items-center justify-center hover:bg-amber-800/50 transition-colors'
                                                         onClick={() => updateQuantity(cartEntry._id, quantity + 1)}
                                                     >
@@ -478,9 +486,10 @@ const OurMenu = () => {
 
                             <div className="mt-auto pt-4">
                                 {quickQty > 0 ? (
-                                    <div className="flex items-center gap-3">
+                                    <div className={`flex items-center gap-3 ${quickQtyPending ? 'pointer-events-none opacity-60' : ''}`}>
                                         <button
                                             type="button"
+                                            disabled={quickQtyPending}
                                             onClick={() =>
                                                 quickQty > 1
                                                     ? updateQuantity(quickCartEntry._id, quickQty - 1)
@@ -495,6 +504,7 @@ const OurMenu = () => {
                                         </span>
                                         <button
                                             type="button"
+                                            disabled={quickQtyPending}
                                             onClick={() => updateQuantity(quickCartEntry._id, quickQty + 1)}
                                             className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-amber-700/50 bg-amber-900/40 text-amber-100 hover:bg-amber-800/50 transition"
                                         >

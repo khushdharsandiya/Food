@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { addButtonBase, addButtonHover, commonTransition } from '../../assets/dummydata'
-import { useCart } from '../../CartContext/CartContext';
+import { useCart, isCartLinePendingSync } from '../../CartContext/CartContext';
 import { FaFire, FaHeart, FaPlus, FaStar } from 'react-icons/fa';
 import { HiMinus, HiPlus } from "react-icons/hi";
 import FloatingParticle from '../FloatingParticle/FloatingParticle';
@@ -8,6 +8,7 @@ import axios from 'axios';
 import { menuImageFallback, menuImageSrc } from '../../utils/imageUrl';
 import { itemsArrayFromApiResponse } from '../../utils/itemsResponse';
 import { useNavigate } from 'react-router-dom';
+import { useLockBodyScroll } from '../../hooks/useLockBodyScroll'
 
 const SpecialOffer = () => {
   const navigate = useNavigate();
@@ -18,6 +19,8 @@ const SpecialOffer = () => {
   const [fetchError, setFetchError] = useState('');
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const { addToCart, removeFromCart, cartItems, updateQuantity } = useCart();
+
+  useLockBodyScroll(showLoginPrompt)
 
   const requireLoginBeforeCart = () => {
     const token = localStorage.getItem('authToken');
@@ -89,9 +92,10 @@ const SpecialOffer = () => {
 
         <div className="grid grid-cols-1 items-stretch sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
           {displayList.map(item => {
-            const cartItem = cartItems.find(ci => ci.item?._id === item._id);
+            const cartItem = cartItems.find(ci => String(ci.item?._id) === String(item._id));
             const qty = cartItem ? cartItem.quantity : 0;
             const cartId = cartItem?._id
+            const qtyPending = cartItem ? isCartLinePendingSync(cartItem._id) : false;
             const isOutOfStock = item.inStock === false;
 
             return (
@@ -147,9 +151,10 @@ const SpecialOffer = () => {
                     </span>
                     <div className="flex justify-end">
                       {qty > 0 ? (
-                        <div className="flex h-9 flex-nowrap items-center gap-1.5 sm:h-10 sm:gap-2">
+                        <div className={`flex h-9 flex-nowrap items-center gap-1.5 sm:h-10 sm:gap-2 ${qtyPending ? 'pointer-events-none opacity-60' : ''}`}>
                           <button
                             type="button"
+                            disabled={qtyPending}
                             onClick={() => {
                               qty > 1 ? updateQuantity(cartId, qty - 1) : removeFromCart(cartId)
                             }}
@@ -162,6 +167,7 @@ const SpecialOffer = () => {
                           </span>
                           <button
                             type="button"
+                            disabled={qtyPending}
                             onClick={() => {
                               updateQuantity(cartId, qty + 1)
                             }}

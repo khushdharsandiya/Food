@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { FaRegEnvelope } from "react-icons/fa";
 import { FaFacebook, FaInstagram, FaXTwitter, FaYoutube } from 'react-icons/fa6'
 import { BiChevronRight } from "react-icons/bi";
-
+import { useLockBodyScroll } from '../../hooks/useLockBodyScroll'
 /** Decorative only — no external URLs until you add real brand accounts */
 const socialDecor = [
     { icon: FaFacebook, color: '#3b5998', label: 'Facebook' },
@@ -26,6 +26,9 @@ const Footer = () => {
     const [email, setEmail] = useState('');
     const [offerPopupOpen, setOfferPopupOpen] = useState(false);
     const [subscribedEmail, setSubscribedEmail] = useState('');
+
+    useLockBodyScroll(offerPopupOpen)
+
     const handleSubmit = (e) => {
         e.preventDefault();
         const cleanEmail = email.trim();

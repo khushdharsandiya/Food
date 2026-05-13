@@ -40,6 +40,14 @@ const OrderGraceOverlay = ({
     return () => clearInterval(id);
   }, [adminVisibleAt, finish]);
 
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, []);
+
   const sec = Math.max(0, Math.ceil(remainingMs / 1000));
 
   const handleCancel = async () => {

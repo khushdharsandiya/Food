@@ -3,7 +3,7 @@ import toast from 'react-hot-toast'
 import { FiArrowRight, FiGlobe, FiMail, FiMapPin, FiMessageSquare, FiPhone } from "react-icons/fi";
 import { contactFormFields } from '../../assets/dummydata'
 import { useNavigate } from 'react-router-dom';
-
+import { useLockBodyScroll } from '../../hooks/useLockBodyScroll'
 const Contact = () => {
   const navigate = useNavigate();
 
@@ -13,6 +13,8 @@ const Contact = () => {
   const [formError, setFormError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+
+  useLockBodyScroll(showLoginPrompt)
 
   const whatsappNumber = '919638979920';
 

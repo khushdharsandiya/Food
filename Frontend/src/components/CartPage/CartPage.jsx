@@ -1,10 +1,11 @@
 import React, { useState } from 'react'
-import { useCart } from '../../CartContext/CartContext'
+import { useCart, isCartLinePendingSync } from '../../CartContext/CartContext'
 import { Link } from 'react-router-dom'
 import { FiMinus, FiPlus } from "react-icons/fi";
 import { FaTimes, FaTrash } from 'react-icons/fa';
 
 import { resolveItemImageUrl, menuImageSrc } from '../../utils/imageUrl'
+import { useLockBodyScroll } from '../../hooks/useLockBodyScroll'
 
 
 const CartPage = () => {
@@ -12,6 +13,8 @@ const CartPage = () => {
     const { cartItems, removeFromCart, updateQuantity, totalAmount } = useCart();
     const [selectedImage, setSelectedImage] = useState(null);
     const validCartItems = cartItems.filter((ci) => ci?.item != null);
+
+    useLockBodyScroll(!!selectedImage)
 
     return (
         <div className="min-h-screen overflow-x-hidden py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-[#1a120b] via-[#2a1e14] to-[#3e2d1b]">
@@ -37,7 +40,9 @@ const CartPage = () => {
                 ) : (
                     <>
                         <div className="grid grid-cols-1 items-stretch sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                            {validCartItems.map(({ _id, item, quantity }) => (
+                            {validCartItems.map(({ _id, item, quantity }) => {
+                                const qtyPending = isCartLinePendingSync(_id)
+                                return (
                                 <div
                                     key={_id}
                                     className="group flex h-full min-h-0 flex-col rounded-2xl border-4 border-dashed border-amber-800 bg-amber-900/20 p-4 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:border-solid hover:shadow-xl hover:shadow-amber-900/10 animate-fade-in transform"
@@ -68,9 +73,10 @@ const CartPage = () => {
                                         </p>
 
                                         <div className="mt-auto flex w-full flex-col gap-4 pt-4">
-                                            <div className="flex items-center justify-center gap-3">
+                                            <div className={`flex items-center justify-center gap-3 ${qtyPending ? 'pointer-events-none opacity-60' : ''}`}>
                                                 <button
                                                     type="button"
+                                                    disabled={qtyPending}
                                                     onClick={() => updateQuantity(_id, Math.max(1, quantity - 1))}
                                                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-900/40 transition-all duration-200 hover:bg-amber-800/50 active:scale-95"
                                                     aria-label="Decrease quantity"
@@ -82,6 +88,7 @@ const CartPage = () => {
                                                 </span>
                                                 <button
                                                     type="button"
+                                                    disabled={qtyPending}
                                                     onClick={() => updateQuantity(_id, quantity + 1)}
                                                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-900/40 transition-all duration-200 hover:bg-amber-800/50 active:scale-95"
                                                     aria-label="Increase quantity"
@@ -106,7 +113,8 @@ const CartPage = () => {
                                         </div>
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                         <div className="mt-12 pt-8 border-t border-amber-800/30 animate-fade-in-up">
                             <div className="flex flex-col sm:flex-row justify-between items-center gap-8">

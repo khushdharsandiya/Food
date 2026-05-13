@@ -11,6 +11,7 @@ import {
   FaUser,
   FaUtensils,
 } from 'react-icons/fa'
+import { useLockBodyScroll } from '../../hooks/useLockBodyScroll'
 
 function clearAuthSession() {
   localStorage.removeItem('authToken')
@@ -31,15 +32,17 @@ const Profile = () => {
   const [success, setSuccess] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [logoutCheckingOverlay, setLogoutCheckingOverlay] = useState(false)
   const [logoutBlockedPopup, setLogoutBlockedPopup] = useState(false)
   const [logoutGuardMessage, setLogoutGuardMessage] = useState('')
-  const [checkingLogout, setCheckingLogout] = useState(false)
   const [pwdForm, setPwdForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' })
   const [showPwd, setShowPwd] = useState({ old: false, new: false, confirm: false })
   const [pwdSaving, setPwdSaving] = useState(false)
   const [pwdError, setPwdError] = useState('')
   const [pwdSuccess, setPwdSuccess] = useState('')
   const [showPasswordForm, setShowPasswordForm] = useState(false)
+
+  useLockBodyScroll(showLogoutConfirm || logoutBlockedPopup || logoutCheckingOverlay)
 
   useEffect(() => {
     const token = localStorage.getItem('authToken')
@@ -157,13 +160,15 @@ const Profile = () => {
       return
     }
 
-    setCheckingLogout(true)
+    setLogoutCheckingOverlay(true)
     setLogoutGuardMessage('')
     try {
       const { data } = await axios.get(`${API}/api/orders`, {
         params: { email },
         headers: { Authorization: `Bearer ${token}` },
+        timeout: 28000,
       })
+      setLogoutCheckingOverlay(false)
       if (hasActiveOrders(data)) {
         setLogoutGuardMessage(
           'You have an active order in progress. Logout is disabled until your order is delivered or cancelled.',
@@ -173,13 +178,12 @@ const Profile = () => {
       }
       setShowLogoutConfirm(true)
     } catch (err) {
+      setLogoutCheckingOverlay(false)
       setLogoutGuardMessage(
         err.response?.data?.message ||
           'Could not verify your order status right now. Please try again in a moment.',
       )
       setLogoutBlockedPopup(true)
-    } finally {
-      setCheckingLogout(false)
     }
   }
 
@@ -343,9 +347,10 @@ const Profile = () => {
                   <button
                     type="button"
                     onClick={handleLogoutAttempt}
-                    className="inline-flex items-center justify-center gap-2 rounded-full border border-red-800/50 bg-red-950/25 py-3.5 font-cinzel text-sm font-semibold uppercase tracking-wider text-red-200 transition hover:bg-red-950/40"
+                    disabled={logoutCheckingOverlay}
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-red-800/50 bg-red-950/25 py-3.5 font-cinzel text-sm font-semibold uppercase tracking-wider text-red-200 transition hover:bg-red-950/40 disabled:opacity-60"
                   >
-                    <FaSignOutAlt className="text-xs" /> {checkingLogout ? 'Checking…' : 'Logout'}
+                    <FaSignOutAlt className="text-xs" /> {logoutCheckingOverlay ? 'Checking…' : 'Logout'}
                   </button>
                 </div>
 
@@ -546,6 +551,17 @@ const Profile = () => {
         </div>
       </div>
 
+      {logoutCheckingOverlay && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-3xl border border-amber-700/35 bg-[#23180f] p-8 text-center shadow-2xl">
+            <div className="mx-auto mb-5 h-12 w-12 animate-spin rounded-full border-2 border-amber-700/40 border-t-amber-400" />
+            <h2 className="font-dancingscript text-2xl text-amber-100">Checking orders…</h2>
+            <p className="mt-2 font-cinzel text-sm text-amber-200/75">
+              Verifying you do not have an active order before logout.
+            </p>
+          </div>
+        </div>
+      )}
       {showLogoutConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl border border-amber-700/35 bg-[#23180f] p-8 shadow-2xl">

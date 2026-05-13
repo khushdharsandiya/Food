@@ -5,6 +5,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { resolveItemImageUrl, menuImageSrc } from '../../utils/imageUrl'
 import { useCart } from '../../CartContext/CartContext'
+import { useLockBodyScroll } from '../../hooks/useLockBodyScroll'
 
 const API = 'https://food-backend-s7t0.onrender.com'
 
@@ -20,6 +21,8 @@ const MyOrder = () => {
     const [reorderModal, setReorderModal] = useState(null); // { id, label } | null
     const navigate = useNavigate();
     const { refetchCart, clearCart, totalItems: cartItemCount } = useCart();
+
+    useLockBodyScroll(!!reorderModal)
 
     const user = JSON.parse(localStorage.getItem('user'));
 

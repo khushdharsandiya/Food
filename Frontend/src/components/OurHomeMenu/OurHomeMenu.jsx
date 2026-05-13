@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useCart } from '../../CartContext/CartContext';
+import { useCart, isCartLinePendingSync } from '../../CartContext/CartContext';
 import { FaMinus, FaPlus } from 'react-icons/fa';
 import { FaStar } from 'react-icons/fa';
 import { Link, useNavigate } from 'react-router-dom';
@@ -8,6 +8,7 @@ import axios from 'axios';
 import { menuImageFallback, menuImageSrc } from '../../utils/imageUrl';
 import { normalizeMenuCategoryKey } from '../../utils/menuCategory';
 import { itemsArrayFromApiResponse } from '../../utils/itemsResponse';
+import { useLockBodyScroll } from '../../hooks/useLockBodyScroll'
 
 const categories = ['breakfast', 'lunch', 'dinner', 'mexican', 'italian', 'desserts', 'drinks'];
 const API = 'https://food-backend-s7t0.onrender.com';
@@ -18,6 +19,8 @@ const OurHomeMenu = () => {
     const { cartItems, addToCart, removeFromCart, updateQuantity } = useCart();
     const [menuData, setMenuData] = useState({});
     const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+
+    useLockBodyScroll(showLoginPrompt)
 
     useEffect(() => {
         axios.get(`${API}/api/items`)
@@ -35,7 +38,7 @@ const OurHomeMenu = () => {
     }, []);
 
 
-    const getCartEntry = id => cartItems.find(ci => ci.item?._id === id);
+    const getCartEntry = id => cartItems.find(ci => String(ci.item?._id) === String(id));
     const getQuantity = id => getCartEntry(id)?.quantity || 0;
     const displayItems = (menuData[activeCategory] || []).slice(0, 6)
     const requireLoginBeforeCart = () => {
@@ -86,6 +89,7 @@ const OurHomeMenu = () => {
                     {displayItems.map((item, i) => {
                         const qty = getQuantity(item._id);
                         const cartEntry = getCartEntry(item._id)
+                        const qtyPending = cartEntry ? isCartLinePendingSync(cartEntry._id) : false;
                         const isOutOfStock = item.inStock === false;
                         return (
                             <div
@@ -148,11 +152,13 @@ const OurHomeMenu = () => {
                                         </div>
 
                                         {/* Cart Controls */}
-                                        <div className='flex items-center gap-2'>
+                                        <div className={`flex items-center gap-2 ${qtyPending ? 'pointer-events-none opacity-60' : ''}`}>
                                             {qty > 0 ? (
                                                 <>
                                                     {/* Minus Button */}
                                                     <button
+                                                        type="button"
+                                                        disabled={qtyPending}
                                                         className='w-8 h-8 rounded-full bg-amber-900/40 flex items-center justify-center hover:bg-amber-800/50 transition-colors'
                                                         onClick={() =>
                                                             qty > 1
@@ -170,6 +176,8 @@ const OurHomeMenu = () => {
 
                                                     {/* Plus Button */}
                                                     <button
+                                                        type="button"
+                                                        disabled={qtyPending}
                                                         className='w-8 h-8 rounded-full bg-amber-900/40 flex items-center justify-center hover:bg-amber-800/50 transition-colors'
                                                         onClick={() => updateQuantity(cartEntry._id, qty + 1)}
                                                     >

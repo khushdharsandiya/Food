@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { Link, useNavigate } from 'react-router-dom'
 import { FaArrowLeft, FaRegStar, FaStar } from 'react-icons/fa'
 import { FiSend } from 'react-icons/fi'
+import { useLockBodyScroll } from '../../hooks/useLockBodyScroll'
 
 const API = 'https://food-backend-s7t0.onrender.com'
 
@@ -24,6 +25,8 @@ const Feedback = () => {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+
+  useLockBodyScroll(showLoginPrompt)
 
   const handleSubmit = async (e) => {
     e.preventDefault()

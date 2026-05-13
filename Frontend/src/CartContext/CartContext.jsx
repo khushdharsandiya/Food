@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 
@@ -68,12 +69,32 @@ const initializer = () => {
     }
 }
 
+/** Cart line still syncing with server after optimistic add — disable +/- until real Mongo id arrives. */
+export function isCartLinePendingSync(id) {
+    return String(id ?? '').startsWith('tmp:')
+}
+
 export const CartProvider = ({ children }) => {
     const [cartItems, dispatch] = useReducer(cartReducer, [], initializer);
+    /** Abort in-flight POST /api/cart when user removes a pending tmp line before server responds. Key = menu item id string. */
+    const addAbortByItemKeyRef = useRef(new Map())
 
+    /** Defer persistence one frame so the UI can paint removals/qty changes immediately (large cart JSON can block the main thread). */
     useEffect(() => {
-        localStorage.setItem('cart', JSON.stringify(cartItems));
-    }, [cartItems]);
+        let cancelled = false
+        const frame = requestAnimationFrame(() => {
+            if (cancelled) return
+            try {
+                localStorage.setItem('cart', JSON.stringify(cartItems))
+            } catch {
+                /* quota / private mode */
+            }
+        })
+        return () => {
+            cancelled = true
+            cancelAnimationFrame(frame)
+        }
+    }, [cartItems])
 
     useEffect(() => {
         const token = localStorage.getItem('authToken');
@@ -119,80 +140,136 @@ export const CartProvider = ({ children }) => {
         const existing = cartItems.find((ci) => String(ci.item?._id) === itemKey);
         const tempId = existing ? String(existing._id) : `tmp:${itemKey}`;
 
-        dispatch({
-            type: 'ADD_ITEM',
-            payload: existing
-                ? { _id: existing._id, item: existing.item, quantity: qty }
-                : { _id: tempId, item, quantity: qty },
-        });
+        flushSync(() => {
+            dispatch({
+                type: 'ADD_ITEM',
+                payload: existing
+                    ? { _id: existing._id, item: existing.item, quantity: qty }
+                    : { _id: tempId, item, quantity: qty },
+            })
+        })
+
+        const prevAbort = addAbortByItemKeyRef.current.get(itemKey)
+        prevAbort?.abort()
+        const ac = new AbortController()
+        addAbortByItemKeyRef.current.set(itemKey, ac)
 
         try {
             const res = await axios.post(
                 `${API}/api/cart`,
                 { itemId: item._id, quantity: qty },
                 {
+                    signal: ac.signal,
                     withCredentials: true,
                     headers: { Authorization: `Bearer ${token}` },
                 },
             );
             const data = res.data;
             if (tempId.startsWith('tmp:')) {
-                dispatch({
-                    type: 'REPLACE_TEMP_CART_LINE',
-                    payload: { tempId, ...data },
-                });
+                flushSync(() => {
+                    dispatch({
+                        type: 'REPLACE_TEMP_CART_LINE',
+                        payload: { tempId, ...data },
+                    })
+                })
             } else {
-                dispatch({ type: 'SYNC_LINE', payload: data });
+                flushSync(() => dispatch({ type: 'SYNC_LINE', payload: data }))
             }
         } catch (err) {
+            if (err.code === 'ERR_CANCELED' || err.name === 'CanceledError' || axios.isCancel?.(err)) {
+                addAbortByItemKeyRef.current.delete(itemKey)
+                return
+            }
             const status = err.response?.status;
             if (status !== 401 && status !== 403) {
                 toast.error('Could not update cart. Please try again.');
             }
             await refetchCart();
+        } finally {
+            if (addAbortByItemKeyRef.current.get(itemKey) === ac) {
+                addAbortByItemKeyRef.current.delete(itemKey)
+            }
         }
     }, [cartItems, refetchCart]);
 
-    const removeFromCart = useCallback(async (_id) => {
+    const removeFromCart = useCallback((_id) => {
         const token = localStorage.getItem('authToken');
         if (!token) return;
-        await axios.delete(`${API}/api/cart/${_id}`, {
-            withCredentials: true,
-            headers: { Authorization: `Bearer ${token}` },
-        });
-        dispatch({ type: 'REMOVE_ITEM', payload: _id });
-    }, []);
-
-    const updateQuantity = useCallback(async (_id, qty) => {
-        const token = localStorage.getItem('authToken');
-        if (!token) return;
-        const res = await axios.put(
-            `${API}/api/cart/${_id}`,
-            { quantity: qty },
-            {
-                withCredentials: true,
-                headers: { Authorization: `Bearer ${token}` },
-            },
-        );
-        dispatch({ type: 'UPDATE_ITEM', payload: res.data });
-    }, []);
-
-    const clearCart = useCallback(async () => {
-        const token = localStorage.getItem('authToken');
-        if (!token) {
-            dispatch({ type: 'CLEAR_CART' });
+        const sid = String(_id)
+        if (sid.startsWith('tmp:')) {
+            const itemKey = sid.slice(4)
+            addAbortByItemKeyRef.current.get(itemKey)?.abort()
+            addAbortByItemKeyRef.current.delete(itemKey)
+            flushSync(() => dispatch({ type: 'REMOVE_ITEM', payload: _id }))
             return;
         }
-        await axios.post(
-            `${API}/api/cart/clear`,
-            {},
-            {
+        flushSync(() => dispatch({ type: 'REMOVE_ITEM', payload: _id }));
+        axios
+            .delete(`${API}/api/cart/${_id}`, {
                 withCredentials: true,
                 headers: { Authorization: `Bearer ${token}` },
-            },
-        );
-        dispatch({ type: 'CLEAR_CART' });
-    }, []);
+            })
+            .catch(async (err) => {
+                const status = err.response?.status;
+                if (status !== 401 && status !== 403) {
+                    toast.error('Could not update cart. Please try again.');
+                }
+                await refetchCart();
+            });
+    }, [refetchCart]);
+
+    const updateQuantity = useCallback((_id, qty) => {
+        const token = localStorage.getItem('authToken');
+        if (!token) return;
+        if (String(_id).startsWith('tmp:')) return;
+
+        const safeQty = Math.max(1, qty);
+        flushSync(() => dispatch({ type: 'UPDATE_ITEM', payload: { _id, quantity: safeQty } }));
+        axios
+            .put(
+                `${API}/api/cart/${_id}`,
+                { quantity: safeQty },
+                {
+                    withCredentials: true,
+                    headers: { Authorization: `Bearer ${token}` },
+                },
+            )
+            .then((res) => {
+                flushSync(() => dispatch({ type: 'SYNC_LINE', payload: res.data }));
+            })
+            .catch(async (err) => {
+                const status = err.response?.status;
+                if (status !== 401 && status !== 403) {
+                    toast.error('Could not update cart. Please try again.');
+                }
+                await refetchCart();
+            });
+    }, [refetchCart]);
+
+    const clearCart = useCallback(() => {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+            flushSync(() => dispatch({ type: 'CLEAR_CART' }));
+            return Promise.resolve();
+        }
+        flushSync(() => dispatch({ type: 'CLEAR_CART' }));
+        return axios
+            .post(
+                `${API}/api/cart/clear`,
+                {},
+                {
+                    withCredentials: true,
+                    headers: { Authorization: `Bearer ${token}` },
+                },
+            )
+            .catch(async (err) => {
+                const status = err.response?.status;
+                if (status !== 401 && status !== 403) {
+                    toast.error('Could not clear cart on server. Restoring…');
+                }
+                await refetchCart();
+            });
+    }, [refetchCart]);
 
     const totalItems = cartItems.reduce((sum, ci) => sum + ci.quantity, 0);
     const totalAmount = cartItems.reduce((sum, ci) => {

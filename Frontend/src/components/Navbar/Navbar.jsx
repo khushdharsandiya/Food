@@ -15,6 +15,7 @@ import {
 } from 'react-icons/fi'
 import { useCart } from '../../CartContext/CartContext'
 import Login from '../Login/Login'
+import { useLockBodyScroll } from '../../hooks/useLockBodyScroll'
 
 const primaryLinks = (isAuthenticated) => [
     { name: 'Home', to: '/', icon: FiHome },
@@ -36,6 +37,8 @@ const Navbar = () => {
     const location = useLocation()
     const { totalItems } = useCart()
     const [showLoginModal, setShowLoginModal] = useState(false)
+
+    useLockBodyScroll(showLoginModal)
 
     const [isAuthenticated, setIsAuthenticated] = useState(
         Boolean(localStorage.getItem('authToken')),
