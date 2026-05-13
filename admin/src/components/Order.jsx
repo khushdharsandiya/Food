@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react'
+import { flushSync } from 'react-dom'
 import { layoutClasses, tableClasses, statusStyles, paymentMethodDetails, iconMap } from '../assets/dummyadmin'
 import adminClient from '../api/adminClient';
 import { FiBox, FiCheckCircle, FiUser } from 'react-icons/fi';
 import AdminModal from './AdminModal'
 
-/** Poll orders so new rows and status changes appear without a manual refresh. */
-const ORDERS_POLL_MS = 800;
+/** Poll interval — was 800ms (too fast: fought dropdown clicks + felt “stuck loading”). */
+const ORDERS_POLL_MS = 6000;
 
 const DEFAULT_AUTO_DELIVER_MS = 5 * 60 * 1000
 
@@ -48,6 +49,31 @@ function formatDeliveredAt(iso) {
   }
 }
 
+/**
+ * Reconcile API status with an in-flight dropdown choice.
+ * Critical: do not let stale `cancelled` / `outForDelivery` pending overwrite `delivered`
+ * when auto-deliver runs between polls (otherwise the select flashes wrong labels).
+ */
+function resolveStatusMerge(rawStatus, pendingStatus) {
+  if (pendingStatus === undefined) return rawStatus
+  if (rawStatus === pendingStatus) return rawStatus
+
+  if (rawStatus === 'delivered') return rawStatus
+  if (rawStatus === 'cancelled') return rawStatus
+
+  if (pendingStatus === 'cancelled') return 'cancelled'
+
+  const rank = { processing: 1, outForDelivery: 2, delivered: 3 }
+  const rr = rank[rawStatus]
+  const rp = rank[pendingStatus]
+  if (rr !== undefined && rp !== undefined) {
+    if (rr > rp) return rawStatus
+    if (rp > rr) return pendingStatus
+  }
+
+  return pendingStatus
+}
+
 const Order = () => {
 
   const [orders, setOrders] = useState([]);
@@ -82,6 +108,15 @@ const Order = () => {
 
   const prevStatusesRef = useRef({});
   const hasInitializedSnapshotRef = useRef(false);
+  /** Skip background polls while a status PUT is in flight (cancel/refund can call Razorpay). */
+  const statusUpdateInFlightRef = useRef(false);
+  /**
+   * Survives stale GET responses: a poll that started before your click can finish after and
+   * otherwise overwrote optimistic UI with old server status.
+   */
+  const pendingLocalStatusRef = useRef({});
+  /** Row id → saving (disables select + shows Working…) */
+  const [statusSaving, setStatusSaving] = useState({});
 
   const mapOrders = (raw) =>
     raw.map(order => ({
@@ -114,10 +149,34 @@ const Order = () => {
       setOrderTimelineMeta(orderTimeline);
       const mapped = mapOrders(rawList || []);
 
+      const pendRef = pendingLocalStatusRef.current;
+      for (const id of [...Object.keys(pendRef)]) {
+        const rawRow = mapped.find((x) => String(x._id) === id);
+        if (!rawRow) {
+          delete pendRef[id];
+          continue;
+        }
+        const mergedStatus = resolveStatusMerge(rawRow.status, pendRef[id]);
+        if (mergedStatus === rawRow.status) {
+          delete pendRef[id];
+        }
+      }
+      const pending = pendingLocalStatusRef.current;
+      const merged =
+        Object.keys(pending).length === 0
+          ? mapped
+          : mapped.map((o) => {
+              const id = String(o._id);
+              const pend = pending[id];
+              if (pend === undefined) return o;
+              const next = resolveStatusMerge(o.status, pend);
+              return next === o.status ? o : { ...o, status: next };
+            });
+
       const prev = prevStatusesRef.current;
       if (!showArchive && hasInitializedSnapshotRef.current) {
         const newlyDelivered = [];
-        for (const o of mapped) {
+        for (const o of merged) {
           const id = String(o._id);
           const oldS = prev[id];
           if (oldS != null && oldS !== 'delivered' && o.status === 'delivered') {
@@ -130,7 +189,7 @@ const Order = () => {
       }
 
       const next = {};
-      for (const o of mapped) {
+      for (const o of merged) {
         next[String(o._id)] = o.status;
       }
       prevStatusesRef.current = next;
@@ -138,7 +197,7 @@ const Order = () => {
         hasInitializedSnapshotRef.current = true;
       }
 
-      setOrders(mapped);
+      setOrders(merged);
       setError(null);
     }
     catch (err) {
@@ -159,7 +218,10 @@ const Order = () => {
     run();
 
     const id = setInterval(() => {
-      if (!cancelled) fetchOrders({ silent: true });
+      if (cancelled) return
+      if (typeof document !== 'undefined' && document.hidden) return
+      if (statusUpdateInFlightRef.current) return
+      fetchOrders({ silent: true })
     }, ORDERS_POLL_MS);
 
     return () => {
@@ -169,19 +231,44 @@ const Order = () => {
   }, [fetchOrders]);
 
   const handleStatusChange = async (orderId, newStatus) => {
+    const idStr = String(orderId)
+    const snapshot = orders
+    pendingLocalStatusRef.current[idStr] = newStatus
+    statusUpdateInFlightRef.current = true
+    flushSync(() => {
+      setStatusSaving((s) => ({ ...s, [idStr]: true }))
+      setOrders((prev) =>
+        prev.map((o) => (String(o._id) === idStr ? { ...o, status: newStatus } : o)),
+      )
+    })
+    let putOk = false
     try {
-      await adminClient.put(`/api/orders/getall/${orderId}`, { status: newStatus });
-      await fetchOrders({ silent: true });
+      await adminClient.put(`/api/orders/getall/${orderId}`, { status: newStatus }, { timeout: 120000 })
+      putOk = true
+      await fetchOrders({ silent: true })
+      delete pendingLocalStatusRef.current[idStr]
     } catch (err) {
-      setModal({
-        open: true,
-        tone: 'danger',
-        title: 'Update failed',
-        message: err.response?.data?.message || 'Failed to update order status.',
-        primaryLabel: 'OK',
-        secondaryLabel: '',
-        onPrimary: closeModal,
-        onSecondary: null,
+      if (!putOk) {
+        delete pendingLocalStatusRef.current[idStr]
+        setOrders(snapshot)
+        setModal({
+          open: true,
+          tone: 'danger',
+          title: 'Update failed',
+          message: err.response?.data?.message || 'Failed to update order status.',
+          primaryLabel: 'OK',
+          secondaryLabel: '',
+          onPrimary: closeModal,
+          onSecondary: null,
+        })
+      }
+      /** PUT succeeded but refresh failed — keep pending so stale polls cannot revert the row. */
+    } finally {
+      statusUpdateInFlightRef.current = false
+      setStatusSaving((s) => {
+        const next = { ...s }
+        delete next[idStr]
+        return next
       })
     }
   };
@@ -485,8 +572,9 @@ const Order = () => {
                             ) : (
                               <select
                                 value={order.status}
+                                disabled={Boolean(statusSaving[String(order._id)])}
                                 onChange={(e) => handleStatusChange(order._id, e.target.value)}
-                                className={`px-3 py-1 rounded-lg ${stat.bg} ${stat.color} border border-amber-500/20 text-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/40`}
+                                className={`px-3 py-1 rounded-lg ${stat.bg} ${stat.color} border border-amber-500/20 text-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/40 disabled:cursor-wait disabled:opacity-70`}
                               >
                                 {Object.entries(statusStyles)
                                   .filter(([k]) => !['succeeded', 'delivered', 'refunded'].includes(k))
@@ -497,6 +585,13 @@ const Order = () => {
                                   ))}
                               </select>
                             )}
+                            {/* {!showArchive &&
+                              order.status !== 'delivered' &&
+                              statusSaving[String(order._id)] ? (
+                              <span className="text-[10px] font-medium text-amber-300/90">
+                                Updating… paid orders may wait on Razorpay refund.
+                              </span>
+                            ) : null} */}
                           </div>
                           {showArchive && order.razorpayRefundStatus && (
                             <span className="text-[10px] text-cyan-300/80">
