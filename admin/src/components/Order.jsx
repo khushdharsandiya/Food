@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react'
-import { flushSync } from 'react-dom'
 import { layoutClasses, tableClasses, statusStyles, paymentMethodDetails, iconMap } from '../assets/dummyadmin'
 import adminClient from '../api/adminClient';
 import { FiBox, FiCheckCircle, FiUser } from 'react-icons/fi';
@@ -74,6 +73,13 @@ function resolveStatusMerge(rawStatus, pendingStatus) {
   return pendingStatus
 }
 
+/** Only these appear in the dispatch select — Cancel uses a separate button (avoids accidental middle clicks). */
+const DISPATCH_SELECT_STATUSES = ['processing', 'outForDelivery']
+
+function isAbortError(err) {
+  return err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError'
+}
+
 const Order = () => {
 
   const [orders, setOrders] = useState([]);
@@ -115,6 +121,10 @@ const Order = () => {
    * otherwise overwrote optimistic UI with old server status.
    */
   const pendingLocalStatusRef = useRef({});
+  /** Ignore out-of-order GET /getall responses (older slow request overwriting newer data causes status glitches). */
+  const ordersFetchGenRef = useRef(0);
+  /** Abort the previous in-flight list GET when a newer one starts (pairs with gen guard). */
+  const ordersGetAbortRef = useRef(null);
   /** Row id → saving (disables select + shows Working…) */
   const [statusSaving, setStatusSaving] = useState({});
 
@@ -140,11 +150,19 @@ const Order = () => {
     }));
 
   const fetchOrders = useCallback(async ({ silent } = {}) => {
+    const gen = ++ordersFetchGenRef.current;
     try {
       if (!silent) setLoading(true);
+      ordersGetAbortRef.current?.abort();
+      const ac = new AbortController();
+      ordersGetAbortRef.current = ac;
       const response = await adminClient.get('/api/orders/getall', {
         params: { archive: showArchive ? 1 : 0 },
+        signal: ac.signal,
       });
+      if (gen !== ordersFetchGenRef.current) {
+        return false;
+      }
       const { orders: rawList, orderTimeline } = normalizeGetAllPayload(response.data);
       setOrderTimelineMeta(orderTimeline);
       const mapped = mapOrders(rawList || []);
@@ -199,12 +217,22 @@ const Order = () => {
 
       setOrders(merged);
       setError(null);
+      return true;
     }
     catch (err) {
+      if (isAbortError(err)) {
+        return false;
+      }
+      if (gen !== ordersFetchGenRef.current) {
+        return false;
+      }
       if (!silent) setError(err.response?.data?.message || 'Failed to load orders.');
+      return false;
     }
     finally {
-      if (!silent) setLoading(false);
+      if (!silent && gen === ordersFetchGenRef.current) {
+        setLoading(false);
+      }
     }
   }, [showArchive]);
 
@@ -227,26 +255,44 @@ const Order = () => {
     return () => {
       cancelled = true;
       clearInterval(id);
+      ordersGetAbortRef.current?.abort();
     };
   }, [fetchOrders]);
+
+  const openCancelOrderConfirm = (orderId) => {
+    setModal({
+      open: true,
+      tone: 'danger',
+      title: 'Cancel this order?',
+      message:
+        'Online paid orders will try a full Razorpay refund before cancel (can take a moment). COD orders cancel immediately.',
+      primaryLabel: 'Yes, cancel order',
+      secondaryLabel: 'Back',
+      onPrimary: () => {
+        closeModal()
+        void handleStatusChange(orderId, 'cancelled')
+      },
+      onSecondary: closeModal,
+    })
+  }
 
   const handleStatusChange = async (orderId, newStatus) => {
     const idStr = String(orderId)
     const snapshot = orders
     pendingLocalStatusRef.current[idStr] = newStatus
     statusUpdateInFlightRef.current = true
-    flushSync(() => {
-      setStatusSaving((s) => ({ ...s, [idStr]: true }))
-      setOrders((prev) =>
-        prev.map((o) => (String(o._id) === idStr ? { ...o, status: newStatus } : o)),
-      )
-    })
+    setStatusSaving((s) => ({ ...s, [idStr]: true }))
+    setOrders((prev) =>
+      prev.map((o) => (String(o._id) === idStr ? { ...o, status: newStatus } : o)),
+    )
     let putOk = false
     try {
       await adminClient.put(`/api/orders/getall/${orderId}`, { status: newStatus }, { timeout: 120000 })
       putOk = true
-      await fetchOrders({ silent: true })
-      delete pendingLocalStatusRef.current[idStr]
+      const refreshed = await fetchOrders({ silent: true })
+      if (refreshed) {
+        delete pendingLocalStatusRef.current[idStr]
+      }
     } catch (err) {
       if (!putOk) {
         delete pendingLocalStatusRef.current[idStr]
@@ -556,10 +602,10 @@ const Order = () => {
                       </td>
 
 
-                      {/* Status: admin sets dispatch; delivered is auto; archive is read-only */}
+                      {/* Status: dispatch = select (no Cancel in list); Cancel = separate confirm */}
                       <td className={`${tableClasses.cellBase}`}>
                         <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className={`${stat.color}`}>
                               {iconMap[stat.icon]}
                             </span>
@@ -569,21 +615,38 @@ const Order = () => {
                               >
                                 {stat.label}
                               </span>
+                            ) : DISPATCH_SELECT_STATUSES.includes(order.status) ? (
+                              <>
+                                <select
+                                  value={order.status}
+                                  disabled={Boolean(statusSaving[String(order._id)])}
+                                  onChange={(e) => handleStatusChange(order._id, e.target.value)}
+                                  className={`px-3 py-1 rounded-lg ${stat.bg} ${stat.color} border border-amber-500/20 text-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/40 disabled:cursor-wait disabled:opacity-70`}
+                                >
+                                  {DISPATCH_SELECT_STATUSES.map((key) => {
+                                    const sty = statusStyles[key]
+                                    return (
+                                      <option value={key} key={key} className={`${sty.bg} ${sty.color}`}>
+                                        {sty.label}
+                                      </option>
+                                    )
+                                  })}
+                                </select>
+                                <button
+                                  type="button"
+                                  disabled={Boolean(statusSaving[String(order._id)])}
+                                  onClick={() => openCancelOrderConfirm(order._id)}
+                                  className="text-[11px] font-semibold text-rose-300/95 underline decoration-rose-400/50 underline-offset-2 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                                >
+                                  Cancel order…
+                                </button>
+                              </>
                             ) : (
-                              <select
-                                value={order.status}
-                                disabled={Boolean(statusSaving[String(order._id)])}
-                                onChange={(e) => handleStatusChange(order._id, e.target.value)}
-                                className={`px-3 py-1 rounded-lg ${stat.bg} ${stat.color} border border-amber-500/20 text-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/40 disabled:cursor-wait disabled:opacity-70`}
+                              <span
+                                className={`inline-flex items-center rounded-lg border border-amber-500/20 px-3 py-1 text-xs font-medium ${stat.bg} ${stat.color}`}
                               >
-                                {Object.entries(statusStyles)
-                                  .filter(([k]) => !['succeeded', 'delivered', 'refunded'].includes(k))
-                                  .map(([key, sty]) => (
-                                    <option value={key} key={key} className={`${sty.bg} ${sty.color}`}>
-                                      {sty.label}
-                                    </option>
-                                  ))}
-                              </select>
+                                {stat.label}
+                              </span>
                             )}
                             {/* {!showArchive &&
                               order.status !== 'delivered' &&
