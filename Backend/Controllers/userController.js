@@ -42,14 +42,31 @@ const createToken = (id, email) => {
 
 //LOGIN FUNCTION
 const loginUser = async (req, res) => {
-    const { email, password } = req.body
+    const emailTrimmed = String(req.body?.email ?? '').trim()
+    const rawEmail = emailTrimmed.toLowerCase()
+    const password = req.body?.password
     try {
-        const user = await userModel.findOne({ email })
+        if (!rawEmail || password == null) {
+            return res.json({ success: false, message: 'Email and password are required' })
+        }
+
+        // lean() + minimal fields — faster JSON path on hot login
+        let user = await userModel
+            .findOne({ email: rawEmail })
+            .select('password username email')
+            .lean()
+        // Legacy rows may store mixed-case email exactly as registered
+        if (!user && emailTrimmed !== rawEmail) {
+            user = await userModel
+                .findOne({ email: emailTrimmed })
+                .select('password username email')
+                .lean()
+        }
         if (!user) {
             return res.json({ success: false, message: "User Doesnt Exits" })
         }
 
-        const isMatch = await bcrypt.compare(password, user.password)
+        const isMatch = await bcrypt.compare(String(password), user.password)
         if (!isMatch) {
             return res.json({ success: false, message: "Invalid Creds" })
         }
@@ -77,7 +94,8 @@ const loginUser = async (req, res) => {
 //REGISTER FUNCTION
 
 const registerUser = async (req, res) => {
-    const { email, password } = req.body;
+    const email = String(req.body?.email ?? '').trim().toLowerCase()
+    const { password } = req.body;
     const username = String(req.body?.username ?? '').trim();
 
     try {

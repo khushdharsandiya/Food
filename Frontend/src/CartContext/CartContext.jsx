@@ -56,8 +56,10 @@ const cartReducer = (state, action) => {
 
 // INITAILISE CART FROM LOCALSTORAGE
 
+/** Guest sessions must not reuse a previous user’s persisted cart (navbar badge / counts). */
 const initializer = () => {
     try {
+        if (!localStorage.getItem('authToken')) return [];
         const parsed = JSON.parse(localStorage.getItem('cart') || '[]');
         if (!Array.isArray(parsed)) return [];
         return parsed.map((ci) => ({
@@ -69,6 +71,9 @@ const initializer = () => {
     }
 }
 
+/** Same-tab logout — Profile calls this after clearing the token. */
+export const FF_CART_CLEAR_ON_LOGOUT = 'ff-cart-clear-on-logout'
+
 /** Cart line still syncing with server after optimistic add — disable +/- until real Mongo id arrives. */
 export function isCartLinePendingSync(id) {
     return String(id ?? '').startsWith('tmp:')
@@ -76,14 +81,71 @@ export function isCartLinePendingSync(id) {
 
 export const CartProvider = ({ children }) => {
     const [cartItems, dispatch] = useReducer(cartReducer, [], initializer);
+
+    /** Increment deltas not yet synced for POST /api/cart (serialize bursts; no abort = no missed server qty). Key = menu item id string. */
+    const addPendingDeltaRef = useRef(new Map())
+    /** Latest item doc for POST body (same key). */
+    const addPendingItemRef = useRef(new Map())
+    /** tmp:id string until first POST succeeds — drives REPLACE_TEMP vs SYNC_LINE. */
+    const optimisticTmpLineIdRef = useRef(new Map())
+    /** Only one pump loop per itemKey at a time. */
+    const addPumpRunnerRef = useRef(new Map())
+
+    /** Abort stale PUT when qty changes again (rapid +/- keeps last intent only). Key = cart line Mongo id. */
+    const putAbortByCartLineIdRef = useRef(new Map())
+
     /** Abort in-flight POST /api/cart when user removes a pending tmp line before server responds. Key = menu item id string. */
     const addAbortByItemKeyRef = useRef(new Map())
+
+    const resetCartClientState = useCallback(() => {
+        addPendingDeltaRef.current.clear()
+        addPendingItemRef.current.clear()
+        optimisticTmpLineIdRef.current.clear()
+        addPumpRunnerRef.current.clear()
+        for (const ac of addAbortByItemKeyRef.current.values()) {
+            try {
+                ac.abort()
+            } catch {
+                /* noop */
+            }
+        }
+        addAbortByItemKeyRef.current.clear()
+        for (const ac of putAbortByCartLineIdRef.current.values()) {
+            try {
+                ac.abort()
+            } catch {
+                /* noop */
+            }
+        }
+        putAbortByCartLineIdRef.current.clear()
+        flushSync(() => dispatch({ type: 'CLEAR_CART' }))
+        try {
+            localStorage.removeItem('cart')
+        } catch {
+            /* noop */
+        }
+    }, [])
+
+    useEffect(() => {
+        const onLogout = () => resetCartClientState()
+        window.addEventListener(FF_CART_CLEAR_ON_LOGOUT, onLogout)
+        return () => window.removeEventListener(FF_CART_CLEAR_ON_LOGOUT, onLogout)
+    }, [resetCartClientState])
+
+    useEffect(() => {
+        const onStorage = (e) => {
+            if (e.key === 'authToken' && !e.newValue) resetCartClientState()
+        }
+        window.addEventListener('storage', onStorage)
+        return () => window.removeEventListener('storage', onStorage)
+    }, [resetCartClientState])
 
     /** Defer persistence one frame so the UI can paint removals/qty changes immediately (large cart JSON can block the main thread). */
     useEffect(() => {
         let cancelled = false
         const frame = requestAnimationFrame(() => {
             if (cancelled) return
+            if (!localStorage.getItem('authToken')) return
             try {
                 localStorage.setItem('cart', JSON.stringify(cartItems))
             } catch {
@@ -127,70 +189,118 @@ export const CartProvider = ({ children }) => {
         }
     }, []);
 
-    /** Optimistic UI: cart updates immediately; server sync runs in the background (fixes slow Render round-trips). */
-    const addToCart = useCallback(async (item, qty) => {
-        if (item && item.inStock === false) {
-            return;
-        }
-        const token = localStorage.getItem('authToken');
-        if (!token) {
-            return;
-        }
-        const itemKey = String(item._id);
-        const existing = cartItems.find((ci) => String(ci.item?._id) === itemKey);
-        const tempId = existing ? String(existing._id) : `tmp:${itemKey}`;
+    /**
+     * Drain pending POST deltas for one menu item in a loop so rapid taps merge into sequential requests
+     * (backend adds quantity each time; aborting earlier POSTs was dropping counts).
+     */
+    const pumpAddForItemKey = useCallback(
+        async (itemKey, token) => {
+            try {
+                while (true) {
+                    const toSend = addPendingDeltaRef.current.get(itemKey) || 0;
+                    if (toSend <= 0) break;
 
-        flushSync(() => {
-            dispatch({
-                type: 'ADD_ITEM',
-                payload: existing
-                    ? { _id: existing._id, item: existing.item, quantity: qty }
-                    : { _id: tempId, item, quantity: qty },
-            })
-        })
+                    addPendingDeltaRef.current.set(itemKey, 0);
 
-        const prevAbort = addAbortByItemKeyRef.current.get(itemKey)
-        prevAbort?.abort()
-        const ac = new AbortController()
-        addAbortByItemKeyRef.current.set(itemKey, ac)
+                    const item = addPendingItemRef.current.get(itemKey);
+                    if (!item) {
+                        addPendingDeltaRef.current.set(itemKey, (addPendingDeltaRef.current.get(itemKey) || 0) + toSend);
+                        break;
+                    }
 
-        try {
-            const res = await axios.post(
-                `${API}/api/cart`,
-                { itemId: item._id, quantity: qty },
-                {
-                    signal: ac.signal,
-                    withCredentials: true,
-                    headers: { Authorization: `Bearer ${token}` },
-                },
-            );
-            const data = res.data;
-            if (tempId.startsWith('tmp:')) {
-                flushSync(() => {
-                    dispatch({
-                        type: 'REPLACE_TEMP_CART_LINE',
-                        payload: { tempId, ...data },
-                    })
-                })
-            } else {
-                flushSync(() => dispatch({ type: 'SYNC_LINE', payload: data }))
+                    const ac = new AbortController();
+                    addAbortByItemKeyRef.current.set(itemKey, ac);
+
+                    try {
+                        const res = await axios.post(
+                            `${API}/api/cart`,
+                            { itemId: item._id, quantity: toSend },
+                            {
+                                signal: ac.signal,
+                                withCredentials: true,
+                                headers: { Authorization: `Bearer ${token}` },
+                            },
+                        );
+                        const data = res.data;
+                        const tmpBinding = optimisticTmpLineIdRef.current.get(itemKey);
+                        if (tmpBinding) {
+                            flushSync(() =>
+                                dispatch({
+                                    type: 'REPLACE_TEMP_CART_LINE',
+                                    payload: { tempId: tmpBinding, ...data },
+                                }),
+                            );
+                            optimisticTmpLineIdRef.current.delete(itemKey);
+                        } else {
+                            flushSync(() => dispatch({ type: 'SYNC_LINE', payload: data }));
+                        }
+                    } catch (err) {
+                        if (err.code === 'ERR_CANCELED' || err.name === 'CanceledError' || axios.isCancel?.(err)) {
+                            addAbortByItemKeyRef.current.delete(itemKey);
+                            return;
+                        }
+                        addPendingDeltaRef.current.set(
+                            itemKey,
+                            (addPendingDeltaRef.current.get(itemKey) || 0) + toSend,
+                        );
+                        const status = err.response?.status;
+                        if (status !== 401 && status !== 403) {
+                            toast.error('Could not update cart. Please try again.');
+                        }
+                        await refetchCart();
+                        return;
+                    } finally {
+                        if (addAbortByItemKeyRef.current.get(itemKey) === ac) {
+                            addAbortByItemKeyRef.current.delete(itemKey);
+                        }
+                    }
+                }
+            } finally {
+                addPumpRunnerRef.current.delete(itemKey);
             }
-        } catch (err) {
-            if (err.code === 'ERR_CANCELED' || err.name === 'CanceledError' || axios.isCancel?.(err)) {
-                addAbortByItemKeyRef.current.delete(itemKey)
-                return
+        },
+        [refetchCart],
+    );
+
+    const addToCart = useCallback(
+        (item, qty) => {
+            if (item && item.inStock === false) {
+                return;
             }
-            const status = err.response?.status;
-            if (status !== 401 && status !== 403) {
-                toast.error('Could not update cart. Please try again.');
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                return;
             }
-            await refetchCart();
-        } finally {
-            if (addAbortByItemKeyRef.current.get(itemKey) === ac) {
-                addAbortByItemKeyRef.current.delete(itemKey)
+            const itemKey = String(item._id);
+            const existing = cartItems.find((ci) => String(ci.item?._id) === itemKey);
+            const tempId = existing ? String(existing._id) : `tmp:${itemKey}`;
+
+            flushSync(() => {
+                dispatch({
+                    type: 'ADD_ITEM',
+                    payload: existing
+                        ? { _id: existing._id, item: existing.item, quantity: qty }
+                        : { _id: tempId, item, quantity: qty },
+                });
+            });
+
+            if (!existing) {
+                optimisticTmpLineIdRef.current.set(itemKey, tempId);
+            } else if (String(existing._id).startsWith('tmp:')) {
+                optimisticTmpLineIdRef.current.set(itemKey, String(existing._id));
             }
-        }
-    }, [cartItems, refetchCart]);
+
+            addPendingItemRef.current.set(itemKey, item);
+            addPendingDeltaRef.current.set(itemKey, (addPendingDeltaRef.current.get(itemKey) || 0) + qty);
+
+            if (addPumpRunnerRef.current.get(itemKey)) {
+                return;
+            }
+            addPumpRunnerRef.current.set(itemKey, true);
+            void pumpAddForItemKey(itemKey, token);
+        },
+        [cartItems, pumpAddForItemKey],
+    );
 
     const removeFromCart = useCallback((_id) => {
         const token = localStorage.getItem('authToken');
@@ -198,12 +308,17 @@ export const CartProvider = ({ children }) => {
         const sid = String(_id)
         if (sid.startsWith('tmp:')) {
             const itemKey = sid.slice(4)
+            addPendingDeltaRef.current.delete(itemKey)
+            addPendingItemRef.current.delete(itemKey)
+            optimisticTmpLineIdRef.current.delete(itemKey)
             addAbortByItemKeyRef.current.get(itemKey)?.abort()
             addAbortByItemKeyRef.current.delete(itemKey)
             flushSync(() => dispatch({ type: 'REMOVE_ITEM', payload: _id }))
             return;
         }
         flushSync(() => dispatch({ type: 'REMOVE_ITEM', payload: _id }));
+        putAbortByCartLineIdRef.current.get(String(_id))?.abort()
+        putAbortByCartLineIdRef.current.delete(String(_id))
         axios
             .delete(`${API}/api/cart/${_id}`, {
                 withCredentials: true,
@@ -224,20 +339,31 @@ export const CartProvider = ({ children }) => {
         if (String(_id).startsWith('tmp:')) return;
 
         const safeQty = Math.max(1, qty);
+        const prevPut = putAbortByCartLineIdRef.current.get(String(_id))
+        prevPut?.abort()
+        const putAc = new AbortController()
+        putAbortByCartLineIdRef.current.set(String(_id), putAc)
+
         flushSync(() => dispatch({ type: 'UPDATE_ITEM', payload: { _id, quantity: safeQty } }));
         axios
             .put(
                 `${API}/api/cart/${_id}`,
                 { quantity: safeQty },
                 {
+                    signal: putAc.signal,
                     withCredentials: true,
                     headers: { Authorization: `Bearer ${token}` },
                 },
             )
             .then((res) => {
+                if (putAbortByCartLineIdRef.current.get(String(_id)) !== putAc) return
+                putAbortByCartLineIdRef.current.delete(String(_id))
                 flushSync(() => dispatch({ type: 'SYNC_LINE', payload: res.data }));
             })
             .catch(async (err) => {
+                if (err.code === 'ERR_CANCELED' || err.name === 'CanceledError' || axios.isCancel?.(err)) {
+                    return
+                }
                 const status = err.response?.status;
                 if (status !== 401 && status !== 403) {
                     toast.error('Could not update cart. Please try again.');
@@ -248,11 +374,10 @@ export const CartProvider = ({ children }) => {
 
     const clearCart = useCallback(() => {
         const token = localStorage.getItem('authToken');
+        resetCartClientState();
         if (!token) {
-            flushSync(() => dispatch({ type: 'CLEAR_CART' }));
             return Promise.resolve();
         }
-        flushSync(() => dispatch({ type: 'CLEAR_CART' }));
         return axios
             .post(
                 `${API}/api/cart/clear`,
@@ -269,7 +394,7 @@ export const CartProvider = ({ children }) => {
                 }
                 await refetchCart();
             });
-    }, [refetchCart]);
+    }, [refetchCart, resetCartClientState]);
 
     const totalItems = cartItems.reduce((sum, ci) => sum + ci.quantity, 0);
     const totalAmount = cartItems.reduce((sum, ci) => {

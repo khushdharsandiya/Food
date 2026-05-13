@@ -12,11 +12,13 @@ import {
   FaUtensils,
 } from 'react-icons/fa'
 import { useLockBodyScroll } from '../../hooks/useLockBodyScroll'
+import { FF_CART_CLEAR_ON_LOGOUT } from '../../CartContext/CartContext'
 
 function clearAuthSession() {
   localStorage.removeItem('authToken')
   localStorage.removeItem('loginData')
   localStorage.removeItem('user')
+  window.dispatchEvent(new CustomEvent(FF_CART_CLEAR_ON_LOGOUT))
 }
 
 const API = 'https://food-backend-s7t0.onrender.com'

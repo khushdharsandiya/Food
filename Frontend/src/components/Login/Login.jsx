@@ -1,15 +1,24 @@
 import React, { useEffect, useState } from 'react'
-import { FaArrowRight, FaCheckCircle, FaEye, FaEyeSlash, FaLock, FaUser, FaUserPlus } from 'react-icons/fa';
+import { FaArrowRight, FaEye, FaEyeSlash, FaLock, FaUser, FaUserPlus } from 'react-icons/fa';
 import { iconClass, inputBase } from '../../assets/dummydata';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import toast from 'react-hot-toast';
+import { useCart } from '../../CartContext/CartContext';
 
 const url = 'https://food-backend-s7t0.onrender.com'
 
-const Login = ({ onLoginSuccess, onclose }) => {
+/** Cold Render free tier can take several seconds — avoid hanging forever. */
+const LOGIN_TIMEOUT_MS = 28000
 
-  const [showToast, setShowToast] = useState({ visible: false, message: '', isError: false });
+/** Lightweight ping — wakes cold Render instance before user submits (first attempt feels faster). */
+const BACKEND_WARMUP_MS = 12000
+
+const Login = ({ onLoginSuccess, onclose }) => {
+  const { refetchCart } = useCart()
+
   const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({ email: '', password: '', rememberMe: false });
 
   useEffect(() => {
@@ -24,12 +33,11 @@ const Login = ({ onLoginSuccess, onclose }) => {
     }
   }, []);
 
-  const flashError = (message) => {
-    setShowToast({ visible: true, message, isError: true });
-    setTimeout(() => {
-      setShowToast({ visible: false, message: '', isError: false });
-    }, 2800);
-  };
+  useEffect(() => {
+    const ac = new AbortController()
+    axios.get(`${url}/`, { timeout: BACKEND_WARMUP_MS, signal: ac.signal }).catch(() => {})
+    return () => ac.abort()
+  }, []);
 
   const handleSubmit = async e => {
     e.preventDefault();
@@ -37,23 +45,25 @@ const Login = ({ onLoginSuccess, onclose }) => {
     const password = String(formData.password || '');
 
     if (!email) {
-      flashError('Please enter your email first.');
+      toast.error('Please enter your email first.');
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      flashError('Please enter a valid email address.');
+      toast.error('Please enter a valid email address.');
       return;
     }
     if (!password) {
-      flashError('Please enter your password.');
+      toast.error('Please enter your password.');
       return;
     }
 
+    setSubmitting(true)
     try {
-      const res = await axios.post(`${url}/api/user/login`, {
-        email,
-        password,
-      });
+      const res = await axios.post(
+        `${url}/api/user/login`,
+        { email, password },
+        { timeout: LOGIN_TIMEOUT_MS },
+      );
 
       if (res.status === 200 && res.data.success && res.data.token) {
         localStorage.setItem('authToken', res.data.token);
@@ -68,24 +78,25 @@ const Login = ({ onLoginSuccess, onclose }) => {
           username: res.data.user?.username || '',
         }));
 
-        setShowToast({ visible: true, message: 'Login Successful', isError: false });
-
-        setTimeout(() => {
-          setShowToast({ visible: false, message: '', isError: false });
-          onLoginSuccess(res.data.token);
-        }, 1500);
+        toast.success('Welcome back!', { duration: 2200 })
+        // Navigate first — cart sync can wait so the modal closes immediately.
+        onLoginSuccess(res.data.token)
+        requestAnimationFrame(() => {
+          void refetchCart()
+        })
 
       } else {
         throw new Error(res.data.message || 'Login Failed');
       }
 
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || 'Login Failed';
-      setShowToast({ visible: true, message: msg, isError: true });
-
-      setTimeout(() => {
-        setShowToast({ visible: false, message: '', isError: false });
-      }, 2000);
+      const msg =
+        err.code === 'ECONNABORTED'
+          ? 'Login timed out. The server may be waking up — try again in a moment.'
+          : err.response?.data?.message || err.message || 'Login Failed';
+      toast.error(msg);
+    } finally {
+      setSubmitting(false)
     }
   };
 
@@ -100,14 +111,6 @@ const Login = ({ onLoginSuccess, onclose }) => {
 
   return (
     <div className='space-y-6 relative w-full'> {/* ✅ removed mx-auto */}
-      
-      <div className={`fixed top-4 right-4 z-50 transition-all duration-300 ${showToast.visible ? 'translate-y-0 opacity-100' : '-translate-y-20 opacity-0'}`}>
-        <div className={`text-white px-4 py-3 rounded-md shadow-lg flex items-center gap-2 text-sm ${showToast.isError ? 'bg-red-600' : 'bg-green-600'}`}>
-          <FaCheckCircle />
-          <span>{showToast.message}</span>
-        </div>
-      </div>
-
       <form onSubmit={handleSubmit} className='space-y-6' noValidate>
         <div className='relative'>
           <FaUser className={iconClass} />
@@ -160,8 +163,21 @@ const Login = ({ onLoginSuccess, onclose }) => {
           </Link>
         </div>
 
-        <button className='w-full py-3 bg-gradient-to-r from-amber-400 to-amber-600 text-[#2D1B0E] font-bold rounded-lg flex items-center justify-center gap-2'>
-          Sign In <FaArrowRight />
+        <button
+          type="submit"
+          disabled={submitting}
+          className='w-full py-3 bg-gradient-to-r from-amber-400 to-amber-600 text-[#2D1B0E] font-bold rounded-lg flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-65'
+        >
+          {submitting ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#2D1B0E]/30 border-t-[#2D1B0E]" aria-hidden />
+              Signing in…
+            </span>
+          ) : (
+            <>
+              Sign In <FaArrowRight />
+            </>
+          )}
         </button>
       </form>
 

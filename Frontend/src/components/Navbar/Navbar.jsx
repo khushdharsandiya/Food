@@ -77,7 +77,7 @@ const Navbar = () => {
         const existing = JSON.parse(localStorage.getItem('loginData') || '{}')
         localStorage.setItem('loginData', JSON.stringify({ ...existing, loggedIn: true }))
         setIsAuthenticated(Boolean(localStorage.getItem('authToken')))
-        navigate('/')
+        navigate('/', { replace: true })
     }
 
     const linkClass = ({ isActive }) =>
@@ -218,7 +218,7 @@ const Navbar = () => {
                             aria-label="Cart"
                         >
                             <FiShoppingCart className="text-lg sm:text-xl" />
-                            {totalItems > 0 && (
+                            {isAuthenticated && totalItems > 0 && (
                                 <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-600 px-1 text-[10px] font-bold text-amber-950">
                                     {totalItems > 99 ? '99+' : totalItems}
                                 </span>
