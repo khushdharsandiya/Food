@@ -16,7 +16,7 @@ const Contact = () => {
 
   useLockBodyScroll(showLoginPrompt)
 
-  const whatsappNumber = '919638979920';
+  const whatsappNumber = '918799664612';
 
   /** Gmail only: must end with @gmail.com, local part 6–64 chars, valid characters */
   const isValidGmail = (email) => {
@@ -167,7 +167,7 @@ setIsSubmitting(false)
               <div className='pl-12 relative space-y-2 z-10'>
                 <p className='text-amber-100 font-light flex items-center'>
                   <FiGlobe className='text-green-400 text-xl mr-2' />
-                  +91 9638979920
+                  +91 8799664612
                 </p>
               </div>
             </div>
