@@ -391,6 +391,47 @@ function resolveDefaultFromLine() {
     return 'Foodie Frenzy <onboarding@resend.dev>';
 }
 
+async function sendViaBrevoApi(toEmail, fromLine, subject, text, html) {
+    const brevoKey = stripOuterQuotes(process.env.BREVO_API_KEY || '');
+    if (!brevoKey) return false;
+
+    let sender = parseFromHeader(fromLine);
+    const fallbackEmail = stripOuterQuotes(process.env.BREVO_SENDER_EMAIL || '');
+    if (!sender.email && fallbackEmail) {
+        sender = { name: sender.name || 'Foodie Frenzy', email: fallbackEmail };
+    }
+    if (!sender.email || !String(sender.email).includes('@')) {
+        const err = new Error('Set MAIL_FROM or BREVO_SENDER_EMAIL to a sender verified in Brevo');
+        err.code = 'BREVO_CONFIG';
+        throw err;
+    }
+
+    const jsonBody = {
+        sender: { name: sender.name, email: sender.email },
+        to: [{ email: toEmail }],
+        subject,
+        textContent: text,
+    };
+    if (html) jsonBody.htmlContent = html;
+
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'api-key': brevoKey,
+            'Content-Type': 'application/json',
+            accept: 'application/json',
+        },
+        body: JSON.stringify(jsonBody),
+    });
+    if (!res.ok) {
+        const responseText = await res.text().catch(() => '');
+        const err = new Error(responseText || `Brevo API failed with status ${res.status}`);
+        err.code = 'BREVO_API_ERROR';
+        throw err;
+    }
+    return true;
+}
+
 /**
  * Send transactional email: Brevo SMTP (preferred when configured) → Brevo HTTP API → Resend → SMTP fallbacks.
  * @param {string} toEmail
@@ -408,47 +449,22 @@ export async function sendTransactionalEmail(toEmail, body) {
     };
 
     if (shouldPreferBrevoSmtpOverHttpApi()) {
-        await deliverViaSmtpWithVerifyAndFallbacks(payload);
-        return;
+        try {
+            await deliverViaSmtpWithVerifyAndFallbacks(payload);
+            return;
+        } catch (smtpErr) {
+            if (!isRetriableNetworkError(smtpErr)) throw smtpErr;
+            const usedApiFallback = await sendViaBrevoApi(toEmail, fromLine, subject, text, html);
+            if (usedApiFallback) {
+                console.warn('[mailer] SMTP timed out; delivered via Brevo API fallback');
+                return;
+            }
+            throw smtpErr;
+        }
     }
 
-    const brevoKey = stripOuterQuotes(process.env.BREVO_API_KEY || '');
-    if (brevoKey) {
-        let sender = parseFromHeader(fromLine);
-        const fallbackEmail = stripOuterQuotes(process.env.BREVO_SENDER_EMAIL || '');
-        if (!sender.email && fallbackEmail) {
-            sender = { name: sender.name || 'Foodie Frenzy', email: fallbackEmail };
-        }
-        if (!sender.email || !String(sender.email).includes('@')) {
-            const err = new Error(
-                'Set MAIL_FROM or BREVO_SENDER_EMAIL to a sender verified in Brevo',
-            );
-            err.code = 'BREVO_CONFIG';
-            throw err;
-        }
-        const jsonBody = {
-            sender: { name: sender.name, email: sender.email },
-            to: [{ email: toEmail }],
-            subject,
-            textContent: text,
-        };
-        if (html) jsonBody.htmlContent = html;
-
-        const res = await fetch('https://api.brevo.com/v3/smtp/email', {
-            method: 'POST',
-            headers: {
-                'api-key': brevoKey,
-                'Content-Type': 'application/json',
-                accept: 'application/json',
-            },
-            body: JSON.stringify(jsonBody),
-        });
-        if (!res.ok) {
-            const responseText = await res.text().catch(() => '');
-            const err = new Error(responseText || `Brevo API failed with status ${res.status}`);
-            err.code = 'BREVO_API_ERROR';
-            throw err;
-        }
+    const usedBrevoApi = await sendViaBrevoApi(toEmail, fromLine, subject, text, html);
+    if (usedBrevoApi) {
         return;
     }
 
