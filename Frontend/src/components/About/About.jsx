@@ -133,6 +133,8 @@ const About = () => {
                       <img
                         src={f.img}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className={`relative z-0 h-full w-full transition duration-700 ease-out group-hover:scale-[1.04] ${
                           f.title === 'Premium Quality'
                             ? 'object-contain object-center p-3 sm:p-4'
@@ -209,6 +211,8 @@ const About = () => {
                     <img
                       src={m.img}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-cover object-center transition duration-700 ease-out hover:scale-[1.03]"
                     />
                     <div className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-t from-[#1a120b] via-transparent to-amber-900/10" />

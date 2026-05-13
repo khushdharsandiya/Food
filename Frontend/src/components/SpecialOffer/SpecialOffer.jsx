@@ -103,6 +103,7 @@ const SpecialOffer = () => {
                   <img
                     src={menuImageSrc(item.imageUrl)}
                     alt={item.name}
+                    loading="lazy"
                     referrerPolicy="no-referrer"
                     decoding="async"
                     onError={(e) => {

@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { GiChefToque } from 'react-icons/gi'
 
-const MIN_VISIBLE_MS = 2400
-const FADE_OUT_MS = 650
-const MAX_VISIBLE_MS = 5200
+/** Shorter gate = faster time-to-interactive; still avoids a flash of unstyled layout. */
+const MIN_VISIBLE_MS = 900
+const FADE_OUT_MS = 520
+const MAX_VISIBLE_MS = 3200
 
 /**
  * First visit or full refresh: show splash until the page is ready and a minimum display time has passed.

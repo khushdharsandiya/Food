@@ -52,6 +52,8 @@ const CartPage = () => {
                                         <img
                                             src={menuImageSrc(resolveItemImageUrl(item?.imageUrl || item?.image))}
                                             alt={item?.name ?? 'Item'}
+                                            loading="lazy"
+                                            decoding="async"
                                             referrerPolicy="no-referrer"
                                             className="h-full w-full object-contain"
                                         />
@@ -131,7 +133,7 @@ const CartPage = () => {
                 <div className='fixed inset-0 z-50 flex items-center justify-center bg-amber-900/40 bg-opacity-75 backdrop-blur-sm p-4 overflow-auto'
                     onClick={() => setSelectedImage(null)}>
                     <div className='relative max-w-full max-h-full'>
-                        <img src={selectedImage} alt='Full View' className=' max-w-[90vw] max-h-[90vh] rounded-lg object-contain' />
+                        <img src={selectedImage} alt='Full View' decoding="async" className=' max-w-[90vw] max-h-[90vh] rounded-lg object-contain' />
 
                         <button onClick={() => setSelectedImage(null)}
                             className=' absolute top-1 right-1 bg-amber-900/80 rounded-full p-2 text-black hover:bg-amber-800 duration-200 active:scale-90'>

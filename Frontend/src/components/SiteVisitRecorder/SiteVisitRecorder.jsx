@@ -9,13 +9,32 @@ const SESSION_KEY = 'ff_site_visit_v1';
  */
 export default function SiteVisitRecorder() {
   useEffect(() => {
-    try {
-      if (sessionStorage.getItem(SESSION_KEY)) return;
-      sessionStorage.setItem(SESSION_KEY, '1');
-      axios.post(`${API}/api/stats/visit`).catch(() => {});
-    } catch {
-      /* private mode / storage block */
+    let cancelled = false
+
+    const record = () => {
+      if (cancelled) return
+      try {
+        if (sessionStorage.getItem(SESSION_KEY)) return
+        sessionStorage.setItem(SESSION_KEY, '1')
+        axios.post(`${API}/api/stats/visit`).catch(() => {})
+      } catch {
+        /* private mode / storage block */
+      }
     }
-  }, []);
+
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(record, { timeout: 4000 })
+      return () => {
+        cancelled = true
+        window.cancelIdleCallback(id)
+      }
+    }
+
+    const t = window.setTimeout(record, 1800)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [])
   return null;
 }

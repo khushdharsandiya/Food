@@ -427,6 +427,8 @@ const MyOrder = () => {
                                                             <img
                                                                 src={menuImageSrc(resolveItemImageUrl(item.item?.imageUrl))}
                                                                 alt={item.item.name}
+                                                                loading="lazy"
+                                                                decoding="async"
                                                                 referrerPolicy="no-referrer"
                                                                 className="w-10 h-10 rounded-lg object-cover border border-amber-500/20"
                                                             />
@@ -626,6 +628,8 @@ function OrderHistoryCard({
                             <img
                                 src={menuImageSrc(resolveItemImageUrl(item.item?.imageUrl))}
                                 alt={item.item.name}
+                                loading="lazy"
+                                decoding="async"
                                 referrerPolicy="no-referrer"
                                 className="h-11 w-11 shrink-0 rounded-lg border border-amber-500/20 object-cover"
                             />

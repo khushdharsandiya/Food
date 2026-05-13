@@ -424,6 +424,7 @@ const OurMenu = () => {
                                 src={menuImageSrc(quickViewItem.imageUrl || quickViewItem.image)}
                                 alt={quickViewItem.name}
                                 className="h-full w-full object-contain p-4"
+                                decoding="async"
                                 referrerPolicy="no-referrer"
                                 onError={(e) => {
                                     if (!e.currentTarget.dataset.fallbackApplied) {
