@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer } from 'react'
 import axios from 'axios'
+import toast from 'react-hot-toast'
 
 const CartContext = createContext();
 
@@ -36,6 +37,18 @@ const cartReducer = (state, action) => {
         }
         case 'CLEAR_CART':
             return [];
+        case 'SYNC_LINE': {
+            const { _id, item, quantity } = action.payload
+            return state.map((ci) =>
+                String(ci._id) === String(_id) ? { _id, item, quantity } : ci,
+            )
+        }
+        case 'REPLACE_TEMP_CART_LINE': {
+            const { tempId, _id, item, quantity } = action.payload
+            return state.map((ci) =>
+                String(ci._id) === String(tempId) ? { _id, item, quantity } : ci,
+            )
+        }
         default: return state;
     }
 }
@@ -78,7 +91,22 @@ export const CartProvider = ({ children }) => {
             });
     }, []);
 
+    const refetchCart = useCallback(async () => {
+        const token = localStorage.getItem('authToken');
+        if (!token) return;
+        try {
+            const { data } = await axios.get(`${API}/api/cart`, {
+                withCredentials: true,
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            dispatch({ type: 'HYDRATE_CART', payload: data });
+        } catch (err) {
+            const status = err.response?.status;
+            if (status !== 401 && status !== 403) console.log(err);
+        }
+    }, []);
 
+    /** Optimistic UI: cart updates immediately; server sync runs in the background (fixes slow Render round-trips). */
     const addToCart = useCallback(async (item, qty) => {
         if (item && item.inStock === false) {
             return;
@@ -87,16 +115,43 @@ export const CartProvider = ({ children }) => {
         if (!token) {
             return;
         }
-        const res = await axios.post(
-            `${API}/api/cart`,
-            { itemId: item._id, quantity: qty },
-            {
-                withCredentials: true,
-                headers: { Authorization: `Bearer ${token}` },
-            },
-        );
-        dispatch({ type: 'ADD_ITEM', payload: res.data });
-    }, []);
+        const itemKey = String(item._id);
+        const existing = cartItems.find((ci) => String(ci.item?._id) === itemKey);
+        const tempId = existing ? String(existing._id) : `tmp:${itemKey}`;
+
+        dispatch({
+            type: 'ADD_ITEM',
+            payload: existing
+                ? { _id: existing._id, item: existing.item, quantity: qty }
+                : { _id: tempId, item, quantity: qty },
+        });
+
+        try {
+            const res = await axios.post(
+                `${API}/api/cart`,
+                { itemId: item._id, quantity: qty },
+                {
+                    withCredentials: true,
+                    headers: { Authorization: `Bearer ${token}` },
+                },
+            );
+            const data = res.data;
+            if (tempId.startsWith('tmp:')) {
+                dispatch({
+                    type: 'REPLACE_TEMP_CART_LINE',
+                    payload: { tempId, ...data },
+                });
+            } else {
+                dispatch({ type: 'SYNC_LINE', payload: data });
+            }
+        } catch (err) {
+            const status = err.response?.status;
+            if (status !== 401 && status !== 403) {
+                toast.error('Could not update cart. Please try again.');
+            }
+            await refetchCart();
+        }
+    }, [cartItems, refetchCart]);
 
     const removeFromCart = useCallback(async (_id) => {
         const token = localStorage.getItem('authToken');
@@ -137,21 +192,6 @@ export const CartProvider = ({ children }) => {
             },
         );
         dispatch({ type: 'CLEAR_CART' });
-    }, []);
-
-    const refetchCart = useCallback(async () => {
-        const token = localStorage.getItem('authToken');
-        if (!token) return;
-        try {
-            const { data } = await axios.get(`${API}/api/cart`, {
-                withCredentials: true,
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            dispatch({ type: 'HYDRATE_CART', payload: data });
-        } catch (err) {
-            const status = err.response?.status;
-            if (status !== 401 && status !== 403) console.log(err);
-        }
     }, []);
 
     const totalItems = cartItems.reduce((sum, ci) => sum + ci.quantity, 0);

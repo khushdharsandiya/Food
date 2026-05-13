@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { FiArrowLeft, FiBox, FiCheckCircle, FiClock, FiMapPin, FiRefreshCw, FiShoppingBag, FiTruck, FiUser } from "react-icons/fi"
 import axios from 'axios'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { resolveItemImageUrl, menuImageSrc } from '../../utils/imageUrl'
 import { useCart } from '../../CartContext/CartContext'
 
@@ -214,7 +214,6 @@ const MyOrder = () => {
 
     return (
         <div className="min-h-screen overflow-x-hidden bg-gradient-to-br from-[#1a120b] via-[#2a1e14] to-[#3e2b1d] py-10 pb-16 px-4 sm:px-6 lg:px-8">
-            <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
 
             {reorderModal && (
                 <div

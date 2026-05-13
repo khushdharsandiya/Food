@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { FaArrowLeft, FaLock } from 'react-icons/fa'
 import { useCart } from '../../CartContext/CartContext'
 import axios from 'axios'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import OrderGraceOverlay from '../OrderGraceOverlay/OrderGraceOverlay'
 
 const API = 'https://food-backend-s7t0.onrender.com'
@@ -237,7 +237,6 @@ const Checkout = () => {
     <>
       {grace && (
         <>
-          <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
           <OrderGraceOverlay
             orderId={grace.id}
             adminVisibleAt={grace.adminVisibleAt}

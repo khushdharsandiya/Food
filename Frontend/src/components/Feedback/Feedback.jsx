@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import axios from 'axios'
-import toast, { Toaster } from 'react-hot-toast'
+import toast from 'react-hot-toast'
 import { Link, useNavigate } from 'react-router-dom'
 import { FaArrowLeft, FaRegStar, FaStar } from 'react-icons/fa'
 import { FiSend } from 'react-icons/fi'
@@ -61,7 +61,6 @@ const Feedback = () => {
 
   return (
     <div className="min-h-[calc(100vh-6rem)] bg-gradient-to-br from-orange-900/90 via-amber-900/95 to-[#2a1e14] py-12 px-4 sm:px-8 font-[Poppins]">
-      <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
 
       <div className="mx-auto max-w-2xl">
         <Link
