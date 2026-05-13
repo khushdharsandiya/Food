@@ -29,6 +29,8 @@ dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 const port = process.env.PORT || 4000;
+// Required behind Render proxy so rate-limit can trust X-Forwarded-For.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
 
 /** Razorpay webhooks need raw body for HMAC — register before express.json() */
 app.post(
