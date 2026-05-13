@@ -9,12 +9,21 @@ function stripOuterQuotes(value) {
 // Some hosts (Render) have flaky/no IPv6 egress; prefer IPv4 for SMTP.
 dns.setDefaultResultOrder('ipv4first');
 
-/** Prefer EMAIL_USER / EMAIL_PASS; fall back to existing SMTP_* used by utils/mail.js */
+/**
+ * SMTP auth for transactional mail.
+ * Brevo (recommended on Render): set BREVO_SMTP_LOGIN + BREVO_SMTP_KEY from Brevo → SMTP & API → SMTP.
+ * Legacy: EMAIL_USER + EMAIL_PASS or SMTP_USER + SMTP_PASS (e.g. Gmail if SMTP_HOST=smtp.gmail.com).
+ */
 export function getEmailCredentials() {
-    let user = stripOuterQuotes(process.env.EMAIL_USER ?? process.env.SMTP_USER ?? '');
-    user = user.trim().toLowerCase();
-    let pass = stripOuterQuotes(process.env.EMAIL_PASS ?? process.env.SMTP_PASS ?? '');
-    // Gmail app passwords are 16 chars; spaces in Google UI / .env are optional — SMTP wants no spaces
+    let user = stripOuterQuotes(
+        process.env.BREVO_SMTP_LOGIN ?? process.env.EMAIL_USER ?? process.env.SMTP_USER ?? '',
+    );
+    user = user.trim();
+    if (/@gmail\.com$/i.test(user)) user = user.toLowerCase();
+
+    let pass = stripOuterQuotes(
+        process.env.BREVO_SMTP_KEY ?? process.env.EMAIL_PASS ?? process.env.SMTP_PASS ?? '',
+    );
     pass = pass.replace(/\s+/g, '').replace(/\r|\n/g, '');
     return { user, pass };
 }
@@ -43,22 +52,70 @@ function isRetriableNetworkError(err) {
  * Human hint for API responses when Gmail rejects auth (535 / EAUTH).
  * Common causes: normal password instead of App Password, 2SV off, wrong user, typos, Render copy-paste with quotes.
  */
-export function getGmailSmtpAuthFailureHint() {
-    return [
+export function getGmailSmtpAuthFailureHint(extraLine = '') {
+    const base = [
         'Gmail rejected SMTP login (535 / EAUTH). Checklist:',
         '1) Google Account → Security → turn on 2-Step Verification.',
         '2) Security → App passwords → create "Mail" / "Other" → copy the 16-character password (no spaces in Render).',
         '3) EMAIL_USER must be the full Gmail / Google Workspace address (e.g. you@gmail.com), not an alias that is not the account primary.',
         '4) EMAIL_PASS must be that App Password only — never your normal Gmail password.',
-        '5) On Render: no smart quotes; paste value without wrapping in extra quotes unless your .env format requires it.',
-        '6) If the Google account shows a "sign-in blocked" alert, use the link Google emailed you to allow access.',
+        '5) On Render: paste EMAIL_PASS in the value field only — do not wrap in quotes (Render is not a .env file).',
+        '6) If Google emailed "blocked sign-in" or "suspicious activity", open the link and allow, then retry.',
+        '7) Advanced Protection Program on the Google account disables App Passwords — use Brevo SMTP (BREVO_SMTP_LOGIN + BREVO_SMTP_KEY) or Brevo API key.',
+        '8) Still failing? In App passwords, delete old entries → create ONE new password → update Render EMAIL_PASS → Save → Manual Deploy.',
     ].join(' ');
+    return extraLine ? `${base} ${extraLine}` : base;
+}
+
+export function getBrevoSmtpAuthFailureHint() {
+    return [
+        'Brevo SMTP rejected login (535 / EAUTH). Checklist:',
+        '1) Brevo → SMTP & API → SMTP → copy "SMTP server" (smtp-relay.brevo.com), Login, and SMTP key (password).',
+        '2) Render: BREVO_SMTP_LOGIN = Login field exactly. BREVO_SMTP_KEY = SMTP key (not your Brevo account password).',
+        '3) SMTP_HOST=smtp-relay.brevo.com (or leave default in code when using Brevo credentials).',
+        '4) MAIL_FROM must use a sender email verified in Brevo (Senders / Domains) — can differ from SMTP login.',
+        '5) Regenerate SMTP key in Brevo if unsure; update Render; redeploy.',
+    ].join(' ');
+}
+
+function smtpHostForDiagnostics() {
+    try {
+        return getSmtpTransportOptions().host;
+    } catch {
+        return stripOuterQuotes(process.env.SMTP_HOST || process.env.BREVO_SMTP_HOST || '');
+    }
 }
 
 /** Attach client-safe diagnostic on auth failures (controllers may forward). */
 function attachClientHintForAuth(err) {
     if (!err || typeof err !== 'object') return;
-    err.clientHint = getGmailSmtpAuthFailureHint();
+    const host = smtpHostForDiagnostics();
+    const useBrevoHint = isBrevoSmtpHost(host) || hasExplicitBrevoSmtpCredentials();
+    if (useBrevoHint) {
+        err.clientHint = getBrevoSmtpAuthFailureHint();
+        logSmtpAuthFailureDiagnostic('auth', 'brevo', host);
+        return;
+    }
+    const { pass } = getEmailCredentials();
+    const len = pass.length;
+    let extra = '';
+    if (len > 0 && len !== 16) {
+        extra = `Your EMAIL_PASS is ${len} characters after removing spaces; a Gmail App Password must be exactly 16.`;
+    }
+    err.clientHint = getGmailSmtpAuthFailureHint(extra);
+    logSmtpAuthFailureDiagnostic('auth', 'gmail', host);
+}
+
+/** Logs only on server — never log the password. */
+function logSmtpAuthFailureDiagnostic(context, provider, host) {
+    const { user, pass } = getEmailCredentials();
+    console.error('[mailer] SMTP AUTH failed (diagnostic)', {
+        context,
+        provider,
+        host: host || undefined,
+        user: maskEmailForLog(user),
+        passCharLength: pass.length,
+    });
 }
 
 export function isOtpMailReady() {
@@ -73,6 +130,25 @@ export function isOtpMailReady() {
 function envTruthy(key) {
     const v = String(process.env[key] ?? '').trim().toLowerCase();
     return v === 'true' || v === '1' || v === 'yes';
+}
+
+function hasExplicitBrevoSmtpCredentials() {
+    const login = stripOuterQuotes(process.env.BREVO_SMTP_LOGIN || '');
+    const key = stripOuterQuotes(process.env.BREVO_SMTP_KEY || '');
+    return Boolean(login && key);
+}
+
+export function isBrevoSmtpHost(host) {
+    const h = String(host || '').trim().toLowerCase();
+    return h === 'smtp-relay.brevo.com' || h === 'smtp.brevo.com' || h.endsWith('.brevo.com');
+}
+
+/** Use Nodemailer + Brevo relay before Brevo HTTP API when SMTP is configured. */
+function shouldPreferBrevoSmtpOverHttpApi() {
+    if (envTruthy('BREVO_FORCE_HTTP_API')) return false;
+    if (hasExplicitBrevoSmtpCredentials()) return true;
+    const h = stripOuterQuotes(process.env.SMTP_HOST || process.env.BREVO_SMTP_HOST || '');
+    return isBrevoSmtpHost(h);
 }
 
 /**
@@ -94,29 +170,41 @@ export function shouldLogOtpToConsole() {
 }
 
 /**
- * Production Nodemailer transport options for OTP / transactional SMTP.
- * - Gmail (`smtp.gmail.com`): defaults to port 465 + secure:true (Render-friendly; avoids STARTTLS edge cases).
- *   Set GMAIL_ALLOW_STARTTLS=true to use 587 + STARTTLS instead.
- * - Other hosts: uses SMTP_PORT / SMTP_SECURE or 587 + STARTTLS.
+ * Production Nodemailer transport options (OTP + transactional SMTP).
+ * - Brevo (`smtp-relay.brevo.com`): defaults port 465 + secure:true (TLS). Override with SMTP_PORT / SMTP_SECURE.
+ * - Gmail (`smtp.gmail.com`): defaults port 465 + secure:true unless GMAIL_ALLOW_STARTTLS=true.
+ * - Other: SMTP_PORT / SMTP_SECURE or 587 + STARTTLS.
  */
 export function getSmtpTransportOptions() {
     const { user, pass } = getEmailCredentials();
     if (!user || !pass) {
-        throw new Error('EMAIL_USER and EMAIL_PASS (or SMTP_USER and SMTP_PASS) are not set');
+        throw new Error(
+            'SMTP credentials missing. Set BREVO_SMTP_LOGIN + BREVO_SMTP_KEY (Brevo → SMTP & API → SMTP), or EMAIL_USER + EMAIL_PASS.',
+        );
     }
 
-    const host = stripOuterQuotes(process.env.SMTP_HOST || 'smtp.gmail.com') || 'smtp.gmail.com';
+    const hostFromEnv = stripOuterQuotes(process.env.SMTP_HOST || process.env.BREVO_SMTP_HOST || '');
+    /** Brevo relay when explicit Brevo SMTP creds; else legacy Gmail default if host omitted. */
+    const host =
+        hostFromEnv ||
+        (hasExplicitBrevoSmtpCredentials() ? 'smtp-relay.brevo.com' : 'smtp.gmail.com');
+
     const isGmail = host === 'smtp.gmail.com';
+    const isBrevo = isBrevoSmtpHost(host);
 
     let port;
     let secure;
     if (isGmail && !envTruthy('GMAIL_ALLOW_STARTTLS')) {
         port = 465;
         secure = true;
+    } else if (isBrevo && !stripOuterQuotes(process.env.SMTP_PORT || '')) {
+        // Brevo: implicit TLS on 465 is reliable on Render (matches "secure SMTP" requirement).
+        port = 465;
+        secure = true;
     } else {
         const portRaw = stripOuterQuotes(process.env.SMTP_PORT || '');
         const secureRaw = stripOuterQuotes(process.env.SMTP_SECURE || '');
-        const defaultPort = isGmail ? 465 : 587;
+        const defaultPort = isGmail ? 465 : isBrevo ? 465 : 587;
         port = Number(portRaw || defaultPort);
         secure =
             secureRaw !== ''
@@ -124,14 +212,19 @@ export function getSmtpTransportOptions() {
                 : port === 465;
     }
 
+    const connectionTimeout = Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 25000);
+    const greetingTimeout = Number(process.env.SMTP_GREETING_TIMEOUT_MS || 25000);
+    const socketTimeout = Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 30000);
+
     return {
         host,
         port,
         secure,
         auth: { user, pass },
-        connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 20000),
-        greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 20000),
-        socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 25000),
+        connectionTimeout,
+        greetingTimeout,
+        socketTimeout,
+        pool: envTruthy('SMTP_POOL'),
         tls: {
             servername: host,
             minVersion: 'TLSv1.2',
@@ -142,6 +235,11 @@ export function getSmtpTransportOptions() {
 /** @returns {import('nodemailer').Transporter} */
 export function createOtpTransporter() {
     return nodemailer.createTransport(getSmtpTransportOptions());
+}
+
+/** Explicit Brevo relay transporter (same as createOtpTransporter when env targets Brevo). */
+export function createBrevoSmtpTransporter() {
+    return createOtpTransporter();
 }
 
 /**
@@ -194,32 +292,25 @@ async function deliverViaSmtpWithVerifyAndFallbacks(payload) {
             attachClientHintForAuth(err);
             throw err;
         }
-        if (base.host !== 'smtp.gmail.com' && !isRetriableNetworkError(err)) {
+        const canFallback =
+            base.host === 'smtp.gmail.com' ||
+            isBrevoSmtpHost(base.host) ||
+            isRetriableNetworkError(err);
+        if (!canFallback) {
             throw err;
         }
         await trySendWithFallbackRoutes(base, payload);
     }
 }
 
-function looksLikeIpv6EgressIssue(err) {
-    const code = String(err?.code || '').toUpperCase();
-    const msg = String(err?.message || err || '');
-    return (
-        /ENETUNREACH|ETIMEDOUT|ESOCKET/.test(code) &&
-        /:[0-9a-f]{1,4}:/i.test(msg)
-    );
-}
-
 async function trySendWithFallbackRoutes(base, payload) {
     const routes = [];
-    const pushRoute = (host, port, secure, servername = 'smtp.gmail.com') => {
-        routes.push({ host, port, secure, servername });
+    const pushRoute = (host, port, secure, servername) => {
+        routes.push({ host, port, secure, servername: servername || host });
     };
 
-    // Try the originally configured route first.
     pushRoute(base.host, base.port, base.secure, base.tls?.servername || base.host);
 
-    // For Gmail, also try both standard ports and resolved IPv4 targets.
     if (base.host === 'smtp.gmail.com') {
         pushRoute('smtp.gmail.com', 465, true, 'smtp.gmail.com');
         pushRoute('smtp.gmail.com', 587, false, 'smtp.gmail.com');
@@ -227,6 +318,17 @@ async function trySendWithFallbackRoutes(base, payload) {
         for (const ip of v4) {
             pushRoute(ip, 465, true, 'smtp.gmail.com');
             pushRoute(ip, 587, false, 'smtp.gmail.com');
+        }
+    }
+
+    if (isBrevoSmtpHost(base.host)) {
+        const relay = 'smtp-relay.brevo.com';
+        pushRoute(relay, 465, true, relay);
+        pushRoute(relay, 587, false, relay);
+        const v4 = await dns.promises.resolve4(relay).catch(() => []);
+        for (const ip of v4) {
+            pushRoute(ip, 465, true, relay);
+            pushRoute(ip, 587, false, relay);
         }
     }
 
@@ -290,7 +392,7 @@ function resolveDefaultFromLine() {
 }
 
 /**
- * Send a transactional email: Brevo API → Resend API → SMTP (with Gmail fallbacks).
+ * Send transactional email: Brevo SMTP (preferred when configured) → Brevo HTTP API → Resend → SMTP fallbacks.
  * @param {string} toEmail
  * @param {{ subject: string, text: string, html?: string }} body
  */
@@ -304,6 +406,11 @@ export async function sendTransactionalEmail(toEmail, body) {
         text,
         ...(html ? { html } : {}),
     };
+
+    if (shouldPreferBrevoSmtpOverHttpApi()) {
+        await deliverViaSmtpWithVerifyAndFallbacks(payload);
+        return;
+    }
 
     const brevoKey = stripOuterQuotes(process.env.BREVO_API_KEY || '');
     if (brevoKey) {

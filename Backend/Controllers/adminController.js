@@ -2,7 +2,18 @@ import userModel from '../Modals/userModal.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import validator from 'validator';
-import { isOtpMailReady, sendOtpEmail, shouldLogOtpToConsole, getGmailSmtpAuthFailureHint } from '../Config/mailer.js';
+import { isOtpMailReady, sendOtpEmail, shouldLogOtpToConsole, getGmailSmtpAuthFailureHint, getBrevoSmtpAuthFailureHint, isBrevoSmtpHost } from '../Config/mailer.js';
+
+function brevoSmtpLikelyFromEnv() {
+    const login = String(process.env.BREVO_SMTP_LOGIN ?? '')
+        .trim()
+        .replace(/^["']|["']$/g, '');
+    const k = String(process.env.BREVO_SMTP_KEY ?? '')
+        .trim()
+        .replace(/^["']|["']$/g, '');
+    const h = String(process.env.SMTP_HOST ?? process.env.BREVO_SMTP_HOST ?? '').trim();
+    return Boolean(login || k) || isBrevoSmtpHost(h);
+}
 
 const OTP_TTL_MS = 5 * 60 * 1000;
 
@@ -115,7 +126,7 @@ export const adminForgotPasswordOtp = async (req, res) => {
             return res.status(503).json({
                 success: false,
                 message:
-                    'Email is not configured. Set EMAIL_USER and EMAIL_PASS in Backend/.env, or MAIL_LOG_OTP_TO_CONSOLE=true (or MAIL_LOG_RESET_LINK_TO_CONSOLE=true) for local dev. Or MAIL_OTP_CONSOLE_ONLY=true to print OTP in the server terminal only.',
+                    'Email is not configured. Set BREVO_SMTP_LOGIN + BREVO_SMTP_KEY + MAIL_FROM on Render, or BREVO_API_KEY. Local dev: MAIL_LOG_OTP_TO_CONSOLE or MAIL_OTP_CONSOLE_ONLY.',
             });
         }
 
@@ -158,10 +169,12 @@ export const adminForgotPasswordOtp = async (req, res) => {
                       : code === 'RESEND_API_ERROR'
                         ? 'Resend API error: check RESEND_API_KEY and RESEND_FROM / MAIL_FROM.'
                         : code === 'EAUTH' || /535|Username and Password not accepted/i.test(resp)
-                          ? getGmailSmtpAuthFailureHint()
+                          ? brevoSmtpLikelyFromEnv()
+                              ? getBrevoSmtpAuthFailureHint()
+                              : getGmailSmtpAuthFailureHint()
                           : /ETIMEDOUT|ENETUNREACH|ECONN|ESOCKET/i.test(code + ' ' + resp)
-                            ? 'SMTP network issue on host. Prefer HTTPS email API: set BREVO_API_KEY (recommended on Render), or RESEND_API_KEY. If staying on Gmail SMTP: keep smtp.gmail.com, port 465, secure true, App Password; ensure Render allows outbound 465.'
-                            : 'Set BREVO_API_KEY or RESEND_API_KEY for reliable mail on Render, or EMAIL_USER + EMAIL_PASS (Gmail App Password) and SMTP_HOST=smtp.gmail.com.');
+                            ? 'SMTP network issue. On Render use Brevo SMTP (BREVO_SMTP_LOGIN + BREVO_SMTP_KEY) or BREVO_API_KEY.'
+                            : 'Set BREVO_SMTP_LOGIN + BREVO_SMTP_KEY + MAIL_FROM, or BREVO_API_KEY / RESEND_API_KEY.');
             return res.status(500).json({
                 success: false,
                 message: 'Could not send email.',
