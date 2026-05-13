@@ -4,6 +4,7 @@ import adminClient from '../api/adminClient'
 import { FiSearch, FiTrash2 } from 'react-icons/fi'
 import { FaRupeeSign } from 'react-icons/fa'
 import { statusStyles, paymentMethodDetails, styles, iconMap } from '../assets/dummyadmin'
+import AdminModal from './AdminModal'
 
 /** Poll orders so the list updates when grace ends (no manual refresh needed) */
 const ORDERS_POLL_MS = 800
@@ -78,6 +79,18 @@ const Dashboard = () => {
   const [siteVisits, setSiteVisits] = useState(0)
   const [exportFrom, setExportFrom] = useState(defaultExportFrom)
   const [exportTo, setExportTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const [modal, setModal] = useState({
+    open: false,
+    tone: 'amber',
+    title: '',
+    message: '',
+    primaryLabel: 'OK',
+    secondaryLabel: '',
+    onPrimary: null,
+    onSecondary: null,
+  })
+
+  const closeModal = () => setModal((m) => ({ ...m, open: false }))
 
   useEffect(() => {
     let cancelled = false
@@ -264,25 +277,65 @@ const Dashboard = () => {
       a.remove()
       URL.revokeObjectURL(url)
     } catch (e) {
-      alert(e?.response?.data?.message || 'Export failed.')
+      setModal({
+        open: true,
+        tone: 'danger',
+        title: 'Export failed',
+        message: e?.response?.data?.message || 'Could not export sales CSV. Please try again.',
+        primaryLabel: 'OK',
+        secondaryLabel: '',
+        onPrimary: closeModal,
+        onSecondary: null,
+      })
     }
   }
 
   const deleteOrder = async (orderId) => {
-    if (!window.confirm('Delete this order from admin records?')) return
-    try {
-      setDeletingOrderId(orderId)
-      await adminClient.delete(`/api/orders/getall/${orderId}`)
-      await reloadDashboard()
-    } catch (e) {
-      alert(e?.response?.data?.message || 'Order delete failed.')
-    } finally {
-      setDeletingOrderId('')
-    }
+    setModal({
+      open: true,
+      tone: 'danger',
+      title: 'Delete order?',
+      message: 'Delete this order from admin records? This cannot be undone.',
+      primaryLabel: 'Delete',
+      secondaryLabel: 'Cancel',
+      onPrimary: async () => {
+        closeModal()
+        try {
+          setDeletingOrderId(orderId)
+          await adminClient.delete(`/api/orders/getall/${orderId}`)
+          await reloadDashboard()
+        } catch (e) {
+          setModal({
+            open: true,
+            tone: 'danger',
+            title: 'Delete failed',
+            message: e?.response?.data?.message || 'Order delete failed.',
+            primaryLabel: 'OK',
+            secondaryLabel: '',
+            onPrimary: closeModal,
+            onSecondary: null,
+          })
+        } finally {
+          setDeletingOrderId('')
+        }
+      },
+      onSecondary: closeModal,
+    })
   }
 
   return (
     <div className={styles.pageWrapper}>
+      <AdminModal
+        open={modal.open}
+        tone={modal.tone}
+        title={modal.title}
+        message={modal.message}
+        primaryLabel={modal.primaryLabel}
+        secondaryLabel={modal.secondaryLabel}
+        onPrimary={modal.onPrimary || closeModal}
+        onSecondary={modal.onSecondary || closeModal}
+        onClose={closeModal}
+      />
       <div className="mx-auto max-w-7xl">
         <div className={`${styles.cardContainer} relative overflow-hidden`}>
           <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-amber-500/20 blur-3xl" />

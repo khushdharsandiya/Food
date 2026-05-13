@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { styles } from '../assets/dummyadmin'
 import adminClient from '../api/adminClient'
 import { FiPlus, FiTrash2, FiToggleLeft, FiToggleRight } from 'react-icons/fi'
+import AdminModal from './AdminModal'
 
 const Coupons = () => {
   const [list, setList] = useState([])
@@ -13,6 +14,17 @@ const Coupons = () => {
     minSubtotal: 0,
     expiresAt: '',
   })
+  const [modal, setModal] = useState({
+    open: false,
+    tone: 'amber',
+    title: '',
+    message: '',
+    primaryLabel: 'OK',
+    secondaryLabel: '',
+    onPrimary: null,
+    onSecondary: null,
+  })
+  const closeModal = () => setModal((m) => ({ ...m, open: false }))
 
   const load = async () => {
     try {
@@ -54,18 +66,47 @@ const Coupons = () => {
       const { data } = await adminClient.patch(`/api/coupons/${c._id}`, { active: !c.active })
       setList((prev) => prev.map((x) => (x._id === c._id ? data : x)))
     } catch (e) {
-      alert(e?.response?.data?.message || 'Update failed.')
+      setModal({
+        open: true,
+        tone: 'danger',
+        title: 'Update failed',
+        message: e?.response?.data?.message || 'Update failed.',
+        primaryLabel: 'OK',
+        secondaryLabel: '',
+        onPrimary: closeModal,
+        onSecondary: null,
+      })
     }
   }
 
   const remove = async (id) => {
-    if (!window.confirm('Delete this coupon?')) return
-    try {
-      await adminClient.delete(`/api/coupons/${id}`)
-      setList((prev) => prev.filter((x) => x._id !== id))
-    } catch (e) {
-      alert(e?.response?.data?.message || 'Delete failed.')
-    }
+    setModal({
+      open: true,
+      tone: 'danger',
+      title: 'Delete coupon?',
+      message: 'Delete this coupon? This cannot be undone.',
+      primaryLabel: 'Delete',
+      secondaryLabel: 'Cancel',
+      onPrimary: async () => {
+        closeModal()
+        try {
+          await adminClient.delete(`/api/coupons/${id}`)
+          setList((prev) => prev.filter((x) => x._id !== id))
+        } catch (e) {
+          setModal({
+            open: true,
+            tone: 'danger',
+            title: 'Delete failed',
+            message: e?.response?.data?.message || 'Delete failed.',
+            primaryLabel: 'OK',
+            secondaryLabel: '',
+            onPrimary: closeModal,
+            onSecondary: null,
+          })
+        }
+      },
+      onSecondary: closeModal,
+    })
   }
 
   if (loading) {
@@ -78,6 +119,17 @@ const Coupons = () => {
 
   return (
     <div className={styles.pageWrapper}>
+      <AdminModal
+        open={modal.open}
+        tone={modal.tone}
+        title={modal.title}
+        message={modal.message}
+        primaryLabel={modal.primaryLabel}
+        secondaryLabel={modal.secondaryLabel}
+        onPrimary={modal.onPrimary || closeModal}
+        onSecondary={modal.onSecondary || closeModal}
+        onClose={closeModal}
+      />
       <div className="mx-auto max-w-3xl">
         <div className={styles.cardContainer}>
           <h2 className={styles.title}>Discount coupons</h2>

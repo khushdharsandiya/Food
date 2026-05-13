@@ -2,12 +2,24 @@ import React, { useEffect, useState } from 'react'
 import { styles } from '../assets/dummyadmin'
 import adminClient from '../api/adminClient'
 import { FiHeart, FiSearch, FiStar, FiTrash2, FiToggleLeft, FiToggleRight } from 'react-icons/fi'
+import AdminModal from './AdminModal'
 
 const List = () => {
 
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [modal, setModal] = useState({
+    open: false,
+    tone: 'amber',
+    title: '',
+    message: '',
+    primaryLabel: 'OK',
+    secondaryLabel: '',
+    onPrimary: null,
+    onSecondary: null,
+  })
+  const closeModal = () => setModal((m) => ({ ...m, open: false }))
 
   useEffect(() => {
     const fetchItems = async () => {
@@ -27,15 +39,33 @@ const List = () => {
 
   //DELETE ITEMS
   const handleDelete = async (itemId) => {
-    if (!window.confirm('Are you sure you want to delete this item?')) return;
-
-    try {
-      await adminClient.delete(`/api/items/${itemId}`);
-      setItems(prev => prev.filter(item => item._id !== itemId));
-      console.log('Delete item Id:', itemId)
-    } catch (err) {
-      console.log('Error deleting item:', err);
-    }
+    setModal({
+      open: true,
+      tone: 'danger',
+      title: 'Delete item?',
+      message: 'Are you sure you want to delete this item? This cannot be undone.',
+      primaryLabel: 'Delete',
+      secondaryLabel: 'Cancel',
+      onPrimary: async () => {
+        closeModal()
+        try {
+          await adminClient.delete(`/api/items/${itemId}`)
+          setItems((prev) => prev.filter((item) => item._id !== itemId))
+        } catch (err) {
+          setModal({
+            open: true,
+            tone: 'danger',
+            title: 'Delete failed',
+            message: err?.response?.data?.message || 'Could not delete this item. Please try again.',
+            primaryLabel: 'OK',
+            secondaryLabel: '',
+            onPrimary: closeModal,
+            onSecondary: null,
+          })
+        }
+      },
+      onSecondary: closeModal,
+    })
   }
 
   const handleToggleStock = async (item) => {
@@ -46,7 +76,16 @@ const List = () => {
       setItems(prev => prev.map(it => it._id === item._id ? data : it));
     } catch (err) {
       console.log('Error updating stock:', err);
-      alert('Stock update failed, please try again.');
+      setModal({
+        open: true,
+        tone: 'danger',
+        title: 'Update failed',
+        message: 'Stock update failed. Please try again.',
+        primaryLabel: 'OK',
+        secondaryLabel: '',
+        onPrimary: closeModal,
+        onSecondary: null,
+      })
     }
   }
 
@@ -87,6 +126,17 @@ const List = () => {
 
   return (
     <div className={styles.pageWrapper}>
+      <AdminModal
+        open={modal.open}
+        tone={modal.tone}
+        title={modal.title}
+        message={modal.message}
+        primaryLabel={modal.primaryLabel}
+        secondaryLabel={modal.secondaryLabel}
+        onPrimary={modal.onPrimary || closeModal}
+        onSecondary={modal.onSecondary || closeModal}
+        onClose={closeModal}
+      />
       <div className="max-w-7xl mx-auto">
         <div className={styles.cardContainer}>
           <h2 className={styles.title}>Manage Menu Items</h2>

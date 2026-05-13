@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState, useRef } from 'react'
 import { layoutClasses, tableClasses, statusStyles, paymentMethodDetails, iconMap } from '../assets/dummyadmin'
 import adminClient from '../api/adminClient';
 import { FiBox, FiCheckCircle, FiUser } from 'react-icons/fi';
+import AdminModal from './AdminModal'
 
 /** Poll orders so new rows and status changes appear without a manual refresh. */
 const ORDERS_POLL_MS = 800;
@@ -54,11 +55,30 @@ const Order = () => {
   const [error, setError] = useState(null);
   /** Popup when an order becomes delivered (customer received) while this screen is open */
   const [deliveredNotice, setDeliveredNotice] = useState(null);
+  useEffect(() => {
+    if (!deliveredNotice?.orders?.length) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [deliveredNotice])
   const [orderTimelineMeta, setOrderTimelineMeta] = useState({
     autoDeliverAfterOutMs: DEFAULT_AUTO_DELIVER_MS,
   });
   /** When true, loads cancelled / refunded rows only (archive). */
   const [showArchive, setShowArchive] = useState(false);
+  const [modal, setModal] = useState({
+    open: false,
+    tone: 'amber',
+    title: '',
+    message: '',
+    primaryLabel: 'OK',
+    secondaryLabel: '',
+    onPrimary: null,
+    onSecondary: null,
+  })
+  const closeModal = () => setModal((m) => ({ ...m, open: false }))
 
   const prevStatusesRef = useRef({});
   const hasInitializedSnapshotRef = useRef(false);
@@ -153,7 +173,16 @@ const Order = () => {
       await adminClient.put(`/api/orders/getall/${orderId}`, { status: newStatus });
       await fetchOrders({ silent: true });
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update order status');
+      setModal({
+        open: true,
+        tone: 'danger',
+        title: 'Update failed',
+        message: err.response?.data?.message || 'Failed to update order status.',
+        primaryLabel: 'OK',
+        secondaryLabel: '',
+        onPrimary: closeModal,
+        onSecondary: null,
+      })
     }
   };
 
@@ -165,6 +194,17 @@ const Order = () => {
 
   return (
     <>
+      <AdminModal
+        open={modal.open}
+        tone={modal.tone}
+        title={modal.title}
+        message={modal.message}
+        primaryLabel={modal.primaryLabel}
+        secondaryLabel={modal.secondaryLabel}
+        onPrimary={modal.onPrimary || closeModal}
+        onSecondary={modal.onSecondary || closeModal}
+        onClose={closeModal}
+      />
       {/* Portal-free: render outside blurred card so fixed overlay is viewport-centered */}
       {deliveredNotice && deliveredNotice.orders?.length > 0 && (
         <div
