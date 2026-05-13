@@ -1,9 +1,8 @@
-import nodemailer from 'nodemailer';
+import { createOtpTransporter, getEmailCredentials } from '../Config/mailer.js';
 
 export function isMailConfigured() {
-    const u = String(process.env.SMTP_USER ?? '').trim();
-    const p = String(process.env.SMTP_PASS ?? '').trim();
-    return Boolean(u && p);
+    const { user, pass } = getEmailCredentials();
+    return Boolean(user && pass);
 }
 
 function escapeHtml(s) {
@@ -15,19 +14,10 @@ function escapeHtml(s) {
 }
 
 export async function sendPasswordResetLink(toEmail, resetUrl, username = '') {
-    const transporter = nodemailer.createTransport({
-        host: String(process.env.SMTP_HOST || 'smtp.gmail.com').trim(),
-        port: Number(process.env.SMTP_PORT || 587),
-        secure: String(process.env.SMTP_SECURE || '').toLowerCase() === 'true',
-        auth: {
-            user: String(process.env.SMTP_USER).trim(),
-            pass: String(process.env.SMTP_PASS).trim(),
-        },
-    });
-
+    const transporter = createOtpTransporter();
+    const { user } = getEmailCredentials();
     const from =
-        String(process.env.MAIL_FROM || '').trim() ||
-        `Foodie Frenzy <${String(process.env.SMTP_USER).trim()}>`;
+        String(process.env.MAIL_FROM || '').trim() || `Foodie Frenzy <${user}>`;
     const safeName = String(username || '').replace(/[<>]/g, '');
     const safeUrl = escapeHtml(resetUrl);
 

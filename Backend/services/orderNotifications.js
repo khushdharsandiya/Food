@@ -1,5 +1,4 @@
-import nodemailer from 'nodemailer';
-import { getEmailCredentials, isOtpMailReady } from '../Config/mailer.js';
+import { isOtpMailReady, sendTransactionalEmail } from '../Config/mailer.js';
 
 function money(n) {
     const x = Number(n);
@@ -74,27 +73,12 @@ export async function notifyOrderEmail(order, kind, extra = {}) {
         }
 
         if (!isOtpMailReady()) {
-            console.log('[order email — SMTP not configured]', { kind, to, orderId: id });
+            console.log('[order email — mail not configured]', { kind, to, orderId: id });
             console.log(text);
             return;
         }
 
-        const { user, pass } = getEmailCredentials();
-        const transporter = nodemailer.createTransport({
-            host: 'smtp.gmail.com',
-            port: 587,
-            secure: false,
-            auth: { user, pass: pass.replace(/\s+/g, '') },
-        });
-        const from =
-            String(process.env.MAIL_FROM || '').trim() || `Foodie Frenzy <${user}>`;
-
-        await transporter.sendMail({
-            from,
-            to,
-            subject,
-            text,
-        });
+        await sendTransactionalEmail(to, { subject, text });
     } catch (err) {
         console.error('[notifyOrderEmail]', err?.message || err);
     }

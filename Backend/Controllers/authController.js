@@ -1,7 +1,7 @@
 import userModel from '../Modals/userModal.js';
 import bcrypt from 'bcryptjs';
 import validator from 'validator';
-import { isOtpMailReady, sendOtpEmail, shouldLogOtpToConsole } from '../Config/mailer.js';
+import { isOtpMailReady, sendOtpEmail, shouldLogOtpToConsole, getGmailSmtpAuthFailureHint } from '../Config/mailer.js';
 
 const OTP_TTL_MS = 5 * 60 * 1000;
 
@@ -39,7 +39,7 @@ export const forgotPasswordOtp = async (req, res) => {
             return res.status(503).json({
                 success: false,
                 message:
-                    'Email is not configured. Set EMAIL_USER and EMAIL_PASS (quoted if they contain spaces) in Backend/.env, or MAIL_LOG_OTP_TO_CONSOLE / MAIL_LOG_RESET_LINK_TO_CONSOLE=true for local dev. Or MAIL_OTP_CONSOLE_ONLY=true to print OTP in the server terminal only.',
+                    'Email is not configured. On Render set EMAIL_USER (full Gmail), EMAIL_PASS (16-char App Password), SMTP_HOST=smtp.gmail.com, MAIL_FROM, or set BREVO_API_KEY / RESEND_API_KEY. For local dev only: MAIL_LOG_OTP_TO_CONSOLE or MAIL_OTP_CONSOLE_ONLY.',
             });
         }
 
@@ -74,11 +74,18 @@ export const forgotPasswordOtp = async (req, res) => {
             const code = String(mailErr?.code || '').toUpperCase();
             const resp = String(mailErr?.response || mailErr?.message || '');
             const hint =
-                code === 'EAUTH' || /535|Username and Password not accepted/i.test(resp)
-                    ? 'Gmail rejected login. Use an App Password (16 chars) with 2‑Step Verification ON. Do NOT use your normal Gmail password.'
-                    : /ETIMEDOUT|ENETUNREACH|ECONN|ESOCKET/i.test(code + ' ' + resp)
-                      ? 'SMTP network timeout. Set SMTP_PORT=465 and SMTP_SECURE=true, or switch to a transactional SMTP provider (Brevo/SendGrid/Mailgun).'
-                      : 'Check EMAIL_USER/EMAIL_PASS or SMTP_* environment variables.';
+                mailErr?.clientHint ||
+                (code === 'BREVO_CONFIG'
+                    ? 'Brevo: set MAIL_FROM (and optional BREVO_SENDER_EMAIL) to an address verified in Brevo → Senders.'
+                    : code === 'BREVO_API_ERROR'
+                      ? 'Brevo API error: check BREVO_API_KEY and that the sender in MAIL_FROM is verified in Brevo.'
+                      : code === 'RESEND_API_ERROR'
+                        ? 'Resend API error: check RESEND_API_KEY and RESEND_FROM / MAIL_FROM.'
+                        : code === 'EAUTH' || /535|Username and Password not accepted/i.test(resp)
+                          ? getGmailSmtpAuthFailureHint()
+                          : /ETIMEDOUT|ENETUNREACH|ECONN|ESOCKET/i.test(code + ' ' + resp)
+                            ? 'SMTP network issue on host. Prefer HTTPS email API: set BREVO_API_KEY (recommended on Render), or RESEND_API_KEY. If staying on Gmail SMTP: keep smtp.gmail.com, port 465, secure true, App Password; ensure Render allows outbound 465.'
+                            : 'Set BREVO_API_KEY or RESEND_API_KEY for reliable mail on Render, or EMAIL_USER + EMAIL_PASS (Gmail App Password) and SMTP_HOST=smtp.gmail.com.');
             return res.status(500).json({
                 success: false,
                 message: 'Could not send email.',
