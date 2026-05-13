@@ -2,14 +2,17 @@ import React, { useState } from 'react'
 import toast, { Toaster } from 'react-hot-toast'
 import { FiArrowRight, FiGlobe, FiMail, FiMapPin, FiMessageSquare, FiPhone } from "react-icons/fi";
 import { contactFormFields } from '../../assets/dummydata'
+import { useNavigate } from 'react-router-dom';
 
 const Contact = () => {
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     name: '', phone: '', email: '', address: '', topic: '', query: '',
   })
   const [formError, setFormError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false)
 
   const whatsappNumber = '919638979920';
 
@@ -24,6 +27,11 @@ const Contact = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const token = localStorage.getItem('authToken')
+    if (!token) {
+      setShowLoginPrompt(true)
+      return
+    }
     setFormError('')
 
     const trimmedPhone = String(formData.phone || '').replace(/\D/g, '')
@@ -269,6 +277,39 @@ setIsSubmitting(false)
         </div>
 
       </div>
+      {showLoginPrompt && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-amber-700/35 bg-[#23180f] p-6 shadow-2xl">
+            <h3 className="font-cinzel text-xl font-semibold text-amber-100">Login required</h3>
+            <p className="mt-2 font-cinzel text-sm text-amber-200/80">
+              Please login first to submit your query.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLoginPrompt(false)
+                  navigate('/login')
+                }}
+                className="flex-1 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 py-2.5 font-cinzel text-sm font-semibold text-[#1a0f08]"
+              >
+                Login
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowLoginPrompt(false)}
+                className="flex-1 rounded-xl border border-amber-700/45 py-2.5 font-cinzel text-sm text-amber-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

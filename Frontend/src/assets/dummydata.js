@@ -23,7 +23,8 @@ import Image1 from "./Image1.png";
 import Image2 from "./Image2.png";
 import Image3 from "./Image3.png";
 import Image4 from "./Image4.png";
-import Video from "./Video.mp4";
+// NOTE: do not import large videos here.
+// Importing big media into a commonly imported module forces it into the main JS bundle.
 
 // ABOUT PAGE
 export const features = [
@@ -168,5 +169,4 @@ export const contactFormFields = [
 export const bannerAssets = {
     bannerImage: BannerImage,
     orbitImages: [Image1, Image2, Image3, Image4],
-    video: Video,
 };

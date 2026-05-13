@@ -7,14 +7,28 @@ import FloatingParticle from '../FloatingParticle/FloatingParticle';
 import axios from 'axios';
 import { menuImageFallback, menuImageSrc } from '../../utils/imageUrl';
 import { itemsArrayFromApiResponse } from '../../utils/itemsResponse';
+import { useNavigate } from 'react-router-dom';
 
 const SpecialOffer = () => {
+  const navigate = useNavigate();
 
   const [showAll, setShowAll] = useState(false);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const { addToCart, removeFromCart, cartItems, updateQuantity } = useCart();
+
+  const requireLoginBeforeCart = () => {
+    const token = localStorage.getItem('authToken');
+    if (token) return true;
+    setShowLoginPrompt(true);
+    return false;
+  };
+  const handleAddToCart = (item, qty) => {
+    if (!requireLoginBeforeCart()) return;
+    addToCart(item, qty);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -158,7 +172,7 @@ const SpecialOffer = () => {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => addToCart(item, 1)}
+                          onClick={() => handleAddToCart(item, 1)}
                           disabled={isOutOfStock}
                           className={`${addButtonBase} ${isOutOfStock ? 'cursor-not-allowed opacity-60' : addButtonHover} ${commonTransition} !flex h-9 shrink-0 flex-row flex-nowrap items-center justify-center !py-0 px-3 text-sm whitespace-nowrap sm:h-10 sm:px-4 sm:text-base`}
                         >
@@ -190,6 +204,39 @@ const SpecialOffer = () => {
         </div>
         )}
       </div>
+      {showLoginPrompt && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-amber-700/35 bg-[#23180f] p-6 shadow-2xl">
+            <h3 className="font-cinzel text-xl font-semibold text-amber-100">Login required</h3>
+            <p className="mt-2 font-cinzel text-sm text-amber-200/80">
+              Please login first to add items to your cart.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLoginPrompt(false);
+                  navigate('/login');
+                }}
+                className="flex-1 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 py-2.5 font-cinzel text-sm font-semibold text-[#1a0f08]"
+              >
+                Login
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowLoginPrompt(false)}
+                className="flex-1 rounded-xl border border-amber-700/45 py-2.5 font-cinzel text-sm text-amber-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

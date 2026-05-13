@@ -19,6 +19,7 @@ function clearAuthSession() {
 }
 
 const API = 'https://food-backend-s7t0.onrender.com'
+const NON_BLOCKING_ORDER_STATUSES = new Set(['delivered', 'cancelled', 'refunded', 'succeeded'])
 
 const Profile = () => {
   const navigate = useNavigate()
@@ -30,6 +31,9 @@ const Profile = () => {
   const [success, setSuccess] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [logoutBlockedPopup, setLogoutBlockedPopup] = useState(false)
+  const [logoutGuardMessage, setLogoutGuardMessage] = useState('')
+  const [checkingLogout, setCheckingLogout] = useState(false)
   const [pwdForm, setPwdForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' })
   const [showPwd, setShowPwd] = useState({ old: false, new: false, confirm: false })
   const [pwdSaving, setPwdSaving] = useState(false)
@@ -139,6 +143,44 @@ const Profile = () => {
   const handleLogout = () => {
     clearAuthSession()
     navigate('/', { replace: true })
+  }
+
+  const hasActiveOrders = (orders) =>
+    Array.isArray(orders) &&
+    orders.some((o) => !NON_BLOCKING_ORDER_STATUSES.has(String(o?.status || '').toLowerCase()))
+
+  const handleLogoutAttempt = async () => {
+    const token = localStorage.getItem('authToken')
+    const email = profile?.email || form.email
+    if (!token || !email) {
+      setShowLogoutConfirm(true)
+      return
+    }
+
+    setCheckingLogout(true)
+    setLogoutGuardMessage('')
+    try {
+      const { data } = await axios.get(`${API}/api/orders`, {
+        params: { email },
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (hasActiveOrders(data)) {
+        setLogoutGuardMessage(
+          'You have an active order in progress. Logout is disabled until your order is delivered or cancelled.',
+        )
+        setLogoutBlockedPopup(true)
+        return
+      }
+      setShowLogoutConfirm(true)
+    } catch (err) {
+      setLogoutGuardMessage(
+        err.response?.data?.message ||
+          'Could not verify your order status right now. Please try again in a moment.',
+      )
+      setLogoutBlockedPopup(true)
+    } finally {
+      setCheckingLogout(false)
+    }
   }
 
   const isStrongPassword = (value) =>
@@ -300,10 +342,10 @@ const Profile = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowLogoutConfirm(true)}
+                    onClick={handleLogoutAttempt}
                     className="inline-flex items-center justify-center gap-2 rounded-full border border-red-800/50 bg-red-950/25 py-3.5 font-cinzel text-sm font-semibold uppercase tracking-wider text-red-200 transition hover:bg-red-950/40"
                   >
-                    <FaSignOutAlt className="text-xs" /> Logout
+                    <FaSignOutAlt className="text-xs" /> {checkingLogout ? 'Checking…' : 'Logout'}
                   </button>
                 </div>
 
@@ -523,6 +565,35 @@ const Profile = () => {
                 className="flex-1 rounded-xl bg-gradient-to-r from-red-600 to-red-500 py-3 font-cinzel text-sm font-semibold text-white"
               >
                 Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {logoutBlockedPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-amber-700/35 bg-[#23180f] p-8 shadow-2xl">
+            <h2 className="font-dancingscript text-2xl text-amber-100">Logout blocked</h2>
+            <p className="mt-2 font-cinzel text-sm text-amber-200/80">
+              {logoutGuardMessage || 'You cannot logout while an order is still active.'}
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setLogoutBlockedPopup(false)
+                  navigate('/myorder')
+                }}
+                className="flex-1 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 py-3 font-cinzel text-sm font-semibold text-[#1a0f08]"
+              >
+                View Orders
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogoutBlockedPopup(false)}
+                className="flex-1 rounded-xl border border-amber-700/40 py-3 font-cinzel text-sm text-amber-100"
+              >
+                OK
               </button>
             </div>
           </div>

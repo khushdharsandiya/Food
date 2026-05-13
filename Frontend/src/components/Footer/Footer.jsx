@@ -24,12 +24,17 @@ const Footer = () => {
 
 
     const [email, setEmail] = useState('');
+    const [offerPopupOpen, setOfferPopupOpen] = useState(false);
+    const [subscribedEmail, setSubscribedEmail] = useState('');
     const handleSubmit = (e) => {
         e.preventDefault();
-        alert(`Thank for subscribing! we'll send updates to  ${email}!`);
+        const cleanEmail = email.trim();
+        setSubscribedEmail(cleanEmail);
+        setOfferPopupOpen(true);
         setEmail('');
     }
     return (
+        <>
         <footer className="bg-[#2A211C] text-amber-100 py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
             <div className="max-w-7xl mx-auto relative z-10">
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 mb-12">
@@ -141,6 +146,50 @@ const Footer = () => {
 
             </div>
         </footer>
+        {offerPopupOpen && (
+            <div
+                className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+                role="dialog"
+                aria-modal="true"
+            >
+                <div className="w-full max-w-md overflow-hidden rounded-3xl border border-amber-700/45 bg-[#2a211c] shadow-[0_25px_90px_-20px_rgba(0,0,0,0.8)]">
+                    <div className="border-b border-amber-800/50 bg-gradient-to-r from-amber-900/40 to-transparent px-6 py-5">
+                        <h3 className="font-dancingscript text-4xl text-amber-200">Welcome to exclusive offers</h3>
+                        <p className="mt-1 font-cinzel text-xs uppercase tracking-[0.2em] text-amber-400/90">
+                            Subscription confirmed
+                        </p>
+                    </div>
+                    <div className="space-y-4 px-6 py-6">
+                        <p className="font-cinzel text-sm leading-relaxed text-amber-100/85">
+                            Thanks for subscribing! We will send hand-picked deals and updates to:
+                        </p>
+                        <p className="rounded-xl border border-amber-700/40 bg-[#1a120b]/65 px-3 py-2 font-mono text-sm text-amber-200 break-all">
+                            {subscribedEmail}
+                        </p>
+                        <div className="flex gap-3 pt-1">
+                            <button
+                                type="button"
+                                onClick={() => setOfferPopupOpen(false)}
+                                className="flex-1 rounded-xl border border-amber-700/50 bg-[#1a120b]/70 py-2.5 font-cinzel text-sm text-amber-100 transition hover:bg-amber-900/35"
+                            >
+                                Close
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setOfferPopupOpen(false);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="flex-1 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 py-2.5 font-cinzel text-sm font-semibold text-[#1a0f08] transition hover:scale-[1.01]"
+                            >
+                                Continue
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+        </>
 
     )
 }

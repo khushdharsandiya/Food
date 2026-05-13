@@ -9,7 +9,7 @@ import { useCart } from '../../CartContext/CartContext'
 const API = 'https://food-backend-s7t0.onrender.com'
 
 /** Order list polls for live status updates (e.g. Out for delivery → Delivered). */
-const ORDERS_POLL_MS = 2000
+const ORDERS_POLL_MS = 8000
 
 const MyOrder = () => {
 
@@ -74,7 +74,10 @@ const MyOrder = () => {
         if (!user?.email) return undefined;
         let cancelled = false;
         const id = setInterval(() => {
-            if (!cancelled) fetchOrders({ silent: true });
+            if (cancelled) return;
+            // Avoid background polling — saves bandwidth and prevents UI feeling laggy.
+            if (document.hidden) return;
+            fetchOrders({ silent: true });
         }, ORDERS_POLL_MS);
         return () => {
             cancelled = true;
